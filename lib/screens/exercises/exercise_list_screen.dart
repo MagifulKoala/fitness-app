@@ -34,7 +34,8 @@ class _ExerciseListScreenState extends State<ExerciseListScreen> {
         _exercises = results;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('_load error: $e\n$st');
       setState(() => _loading = false);
     }
   }

@@ -70,7 +70,7 @@ class WorkoutPlanRepository {
       orderBy: 'day_of_week ASC',
     );
     final entries =
-        entryRows.map((r) => WorkoutPlanEntry.fromMap(r)).toList();
+        entryRows.map<WorkoutPlanEntry>((r) => WorkoutPlanEntry.fromMap(r)).toList();
     return WorkoutPlan.fromMap(row, entries);
   }
 }

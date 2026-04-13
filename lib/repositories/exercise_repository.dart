@@ -124,7 +124,7 @@ class ExerciseRepository {
         where: 'set_template_id = ?',
         whereArgs: [templateId],
       );
-      final sets = setRows.map((r) => SetChild.fromMap(r)).toList();
+      final sets = setRows.map<SetChild>((r) => SetChild.fromMap(r)).toList();
       setTemplate = SetTemplate.fromMap(templates.first, sets);
     }
 

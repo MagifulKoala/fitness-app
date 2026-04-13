@@ -76,7 +76,7 @@ class WorkoutRepository {
       orderBy: 'sort_order ASC',
     );
     final exerciseIds =
-        exRows.map((r) => r['exercise_id'] as String).toList();
+        exRows.map<String>((r) => r['exercise_id'] as String).toList();
     return Workout.fromMap(row, exerciseIds);
   }
 }
