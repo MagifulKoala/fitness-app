@@ -63,38 +63,47 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
 
-    final aliases = _aliasesCtrl.text
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
+    try {
+      final aliases = _aliasesCtrl.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
 
-    final existing = widget.exercise;
-    if (_isEdit && existing != null) {
-      final updated = existing.copyWith(
-        name: _nameCtrl.text.trim(),
-        aliases: aliases,
-        notes: _notesCtrl.text.trim().isEmpty
-            ? null
-            : _notesCtrl.text.trim(),
-        setTemplate: existing.setTemplate.copyWith(sets: _sets),
-      );
-      await widget.exerciseRepo.update(updated);
-    } else {
-      final templateId = _uuid.v4();
-      final exercise = Exercise(
-        id: _uuid.v4(),
-        name: _nameCtrl.text.trim(),
-        aliases: aliases,
-        notes: _notesCtrl.text.trim().isEmpty
-            ? null
-            : _notesCtrl.text.trim(),
-        setTemplate: SetTemplate(id: templateId, sets: _sets),
-      );
-      await widget.exerciseRepo.insert(exercise);
+      final existing = widget.exercise;
+      if (_isEdit && existing != null) {
+        final updated = existing.copyWith(
+          name: _nameCtrl.text.trim(),
+          aliases: aliases,
+          notes: _notesCtrl.text.trim().isEmpty
+              ? null
+              : _notesCtrl.text.trim(),
+          setTemplate: existing.setTemplate.copyWith(sets: _sets),
+        );
+        await widget.exerciseRepo.update(updated);
+      } else {
+        final templateId = _uuid.v4();
+        final exercise = Exercise(
+          id: _uuid.v4(),
+          name: _nameCtrl.text.trim(),
+          aliases: aliases,
+          notes: _notesCtrl.text.trim().isEmpty
+              ? null
+              : _notesCtrl.text.trim(),
+          setTemplate: SetTemplate(id: templateId, sets: _sets),
+        );
+        await widget.exerciseRepo.insert(exercise);
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
     }
-
-    if (mounted) Navigator.pop(context);
   }
 
   @override

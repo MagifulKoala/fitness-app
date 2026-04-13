@@ -26,13 +26,17 @@ class _ExerciseListScreenState extends State<ExerciseListScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final results = _query.isEmpty
-        ? await widget.exerciseRepo.getAll()
-        : await widget.exerciseRepo.search(_query);
-    setState(() {
-      _exercises = results;
-      _loading = false;
-    });
+    try {
+      final results = _query.isEmpty
+          ? await widget.exerciseRepo.getAll()
+          : await widget.exerciseRepo.search(_query);
+      setState(() {
+        _exercises = results;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
   }
 
   @override
