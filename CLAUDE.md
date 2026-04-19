@@ -80,3 +80,18 @@ No external state management library. Repositories are passed via `AppRepositori
 ## Linting
 
 `analysis_options.yaml` extends `package:flutter_lints/flutter.yaml` with no custom overrides. Run `flutter analyze` before committing changes.
+
+
+### Commits and Version Control
+
+Use git to maintain a history of changes made. Currently the project isn't connected to a remote repo so pushing isn't necessary. "git add ." your changes and then "git commit -m ''" with a meaningful commit message that briefly shows the changes made.
+
+
+## Recent Changes
+
+- **Workout detail → exercise navigation**: Exercises listed in `WorkoutDetailScreen` are now tappable `ListTile`s with a chevron; tapping navigates to `ExerciseDetailScreen` (same view as the Exercises tab, including the Log FAB).
+- **Date picker**: `DatePickerField` now allows any date from 2000 to `DateTime(9999,12,31)`. Today is always highlighted via `currentDate: DateTime.now()`.
+- **Android system nav bar**: Bottom sheets (`ExerciseDetailScreen`, `MeasurementDetailScreen`) now add `MediaQuery.viewPadding.bottom` to their padding so the action button is never hidden behind the Android gesture/button bar. `WorkoutSessionScreen` body is wrapped in `SafeArea` for the same reason.
+
+### CLAUDE.md
+Make sure to update the claude.md file with any major changes
