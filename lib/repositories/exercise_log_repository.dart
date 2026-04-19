@@ -40,6 +40,21 @@ class ExerciseLogRepository {
     return result;
   }
 
+  Future<void> update(ExerciseLog exerciseLog) async {
+    log.d('[ExerciseLogRepo] update: id=${exerciseLog.id}');
+    final db = await _db.database;
+    await db.update(
+      'exercise_logs',
+      exerciseLog.toMap(),
+      where: 'id = ?',
+      whereArgs: [exerciseLog.id],
+    );
+    await db.delete('exercise_log_sets', where: 'log_id = ?', whereArgs: [exerciseLog.id]);
+    for (final set in exerciseLog.sets) {
+      await db.insert('exercise_log_sets', set.toMap(logId: exerciseLog.id));
+    }
+  }
+
   Future<void> delete(String logId) async {
     log.d('[ExerciseLogRepo] delete: $logId');
     final db = await _db.database;
