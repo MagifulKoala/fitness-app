@@ -261,7 +261,7 @@ class _StatusDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(height: 6, color: color),
+            Container(height: 15, color: color),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
               child: Text(message,
