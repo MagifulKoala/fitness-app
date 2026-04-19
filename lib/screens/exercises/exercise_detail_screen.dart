@@ -136,15 +136,10 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                               Navigator.pop(ctx);
                               showDialog(
                                 context: context,
-                                builder: (_) => AlertDialog(
-                                  backgroundColor: const Color(0xFFB7F0C2),
-                                  title: const Text('Log successful'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Close'),
-                                    ),
-                                  ],
+                                builder: (_) => _StatusDialog(
+                                  message: 'Log successful',
+                                  color: const Color(0xFFB7F0C2),
+                                  onClose: () => Navigator.pop(context),
                                 ),
                               );
                             }
@@ -152,15 +147,10 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                             if (ctx.mounted) {
                               showDialog(
                                 context: ctx,
-                                builder: (_) => AlertDialog(
-                                  backgroundColor: const Color(0xFFFFC1C1),
-                                  title: const Text('Exercise log failed'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx),
-                                      child: const Text('Close'),
-                                    ),
-                                  ],
+                                builder: (_) => _StatusDialog(
+                                  message: 'Exercise log failed',
+                                  color: const Color(0xFFFFC1C1),
+                                  onClose: () => Navigator.pop(ctx),
                                 ),
                               );
                             }
@@ -245,6 +235,47 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
         icon: const Icon(Icons.add_chart),
         label: const Text('Log'),
         onPressed: () => _showLogDialog(context, repos.exerciseLogRepo),
+      ),
+    );
+  }
+}
+
+class _StatusDialog extends StatelessWidget {
+  final String message;
+  final Color color;
+  final VoidCallback onClose;
+
+  const _StatusDialog({
+    required this.message,
+    required this.color,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(height: 6, color: color),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              child: Text(message,
+                  style: Theme.of(context).textTheme.titleMedium),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: onClose,
+                child: const Text('Close'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
