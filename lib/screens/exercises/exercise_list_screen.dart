@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/app_logger.dart';
 import '../../models/exercise.dart';
 import '../../repositories/exercise_repository.dart';
 import 'exercise_detail_screen.dart';
@@ -35,7 +36,7 @@ class _ExerciseListScreenState extends State<ExerciseListScreen> {
         _loading = false;
       });
     } catch (e, st) {
-      debugPrint('_load error: $e\n$st');
+      log.e('[ExerciseList] load error', error: e, stackTrace: st);
       setState(() => _loading = false);
     }
   }

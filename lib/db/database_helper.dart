@@ -2,6 +2,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import '../core/app_logger.dart';
 
 class DatabaseHelper {
   static DatabaseHelper? _instance;
@@ -140,6 +141,7 @@ class DatabaseHelper {
   }
 
   Future<void> clearAll() async {
+    log.w('[DB] clearAll: wiping all tables');
     final db = await database;
     await db.transaction((txn) async {
       for (final table in [

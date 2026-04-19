@@ -1,3 +1,4 @@
+import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/measurement.dart';
 import '../models/measurement_entry.dart';
@@ -16,11 +17,13 @@ class MeasurementRepository {
   }
 
   Future<void> insertMeasurement(Measurement m) async {
+    log.d('[MeasurementRepo] insert: ${m.name}');
     final db = await _db.database;
     await db.insert('measurements', m.toMap());
   }
 
   Future<void> updateMeasurement(Measurement m) async {
+    log.d('[MeasurementRepo] update: ${m.name}');
     final db = await _db.database;
     await db.update(
       'measurements',
@@ -31,6 +34,7 @@ class MeasurementRepository {
   }
 
   Future<void> deleteMeasurement(String id) async {
+    log.d('[MeasurementRepo] deleteMeasurement: $id');
     final db = await _db.database;
     await db.delete(
       'measurement_entries',
@@ -54,11 +58,13 @@ class MeasurementRepository {
   }
 
   Future<void> insertEntry(MeasurementEntry entry) async {
+    log.d('[MeasurementRepo] insertEntry: ${entry.value} ${entry.unit}');
     final db = await _db.database;
     await db.insert('measurement_entries', entry.toMap());
   }
 
   Future<void> updateEntry(MeasurementEntry entry) async {
+    log.d('[MeasurementRepo] updateEntry: ${entry.value} ${entry.unit}');
     final db = await _db.database;
     await db.update(
       'measurement_entries',
@@ -69,6 +75,7 @@ class MeasurementRepository {
   }
 
   Future<void> deleteEntry(String id) async {
+    log.d('[MeasurementRepo] deleteEntry: $id');
     final db = await _db.database;
     await db.delete(
       'measurement_entries',

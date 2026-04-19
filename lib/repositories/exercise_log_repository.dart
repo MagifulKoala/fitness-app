@@ -1,3 +1,4 @@
+import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/exercise_log.dart';
 import '../models/set_child.dart';
@@ -7,12 +8,14 @@ class ExerciseLogRepository {
 
   ExerciseLogRepository(this._db);
 
-  Future<void> insert(ExerciseLog log) async {
+  Future<void> insert(ExerciseLog exerciseLog) async {
+    log.d('[ExerciseLogRepo] insert: exerciseId=${exerciseLog.exerciseId} sets=${exerciseLog.sets.length}');
     final db = await _db.database;
-    await db.insert('exercise_logs', log.toMap());
-    for (final set in log.sets) {
-      await db.insert('exercise_log_sets', set.toMap(logId: log.id));
+    await db.insert('exercise_logs', exerciseLog.toMap());
+    for (final set in exerciseLog.sets) {
+      await db.insert('exercise_log_sets', set.toMap(logId: exerciseLog.id));
     }
+    log.d('[ExerciseLogRepo] insert complete: id=${exerciseLog.id}');
   }
 
   Future<List<ExerciseLog>> getByExerciseId(String exerciseId) async {
@@ -38,6 +41,7 @@ class ExerciseLogRepository {
   }
 
   Future<void> delete(String logId) async {
+    log.d('[ExerciseLogRepo] delete: $logId');
     final db = await _db.database;
     await db.delete(
       'exercise_log_sets',

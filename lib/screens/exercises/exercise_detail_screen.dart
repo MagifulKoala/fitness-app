@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../app_repositories.dart';
+import '../../core/app_logger.dart';
 import '../../models/exercise.dart';
 import '../../models/exercise_log.dart';
 import '../../models/set_child.dart';
@@ -121,7 +122,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          final log = ExerciseLog(
+                          final entry = ExerciseLog(
                             id: _uuid.v4(),
                             exerciseId: _exercise.id,
                             date: date,
@@ -131,7 +132,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                             sets: sets,
                           );
                           try {
-                            await logRepo.insert(log);
+                            await logRepo.insert(entry);
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
                               showDialog(
@@ -143,7 +144,8 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                                 ),
                               );
                             }
-                          } catch (_) {
+                          } catch (e, st) {
+                            log.e('[ExerciseDetail] log insert failed', error: e, stackTrace: st);
                             if (ctx.mounted) {
                               showDialog(
                                 context: ctx,

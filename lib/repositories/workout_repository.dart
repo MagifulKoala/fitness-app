@@ -1,3 +1,4 @@
+import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/workout.dart';
 
@@ -24,6 +25,7 @@ class WorkoutRepository {
   }
 
   Future<void> insert(Workout workout) async {
+    log.d('[WorkoutRepo] insert: ${workout.name}');
     final db = await _db.database;
     await db.insert('workouts', workout.toMap());
     for (var i = 0; i < workout.exerciseIds.length; i++) {
@@ -36,6 +38,7 @@ class WorkoutRepository {
   }
 
   Future<void> update(Workout workout) async {
+    log.d('[WorkoutRepo] update: ${workout.name}');
     final db = await _db.database;
     await db.update(
       'workouts',
@@ -58,6 +61,7 @@ class WorkoutRepository {
   }
 
   Future<void> delete(String id) async {
+    log.d('[WorkoutRepo] delete: $id');
     final db = await _db.database;
     await db.delete(
       'workout_exercises',

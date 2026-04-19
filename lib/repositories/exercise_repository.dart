@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/exercise.dart';
 import '../models/set_child.dart';
@@ -44,6 +45,7 @@ class ExerciseRepository {
   }
 
   Future<Exercise> insert(Exercise exercise) async {
+    log.d('[ExerciseRepo] insert: ${exercise.name}');
     final db = await _db.database;
     await db.insert('exercises', exercise.toMap());
 
@@ -61,6 +63,7 @@ class ExerciseRepository {
   }
 
   Future<void> update(Exercise exercise) async {
+    log.d('[ExerciseRepo] update: ${exercise.name}');
     final db = await _db.database;
     await db.update(
       'exercises',
@@ -89,6 +92,7 @@ class ExerciseRepository {
   }
 
   Future<void> delete(String id) async {
+    log.d('[ExerciseRepo] delete: $id');
     final db = await _db.database;
     final templates = await db.query(
       'set_templates',

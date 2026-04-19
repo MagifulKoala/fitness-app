@@ -1,3 +1,4 @@
+import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/workout_session.dart';
 
@@ -25,6 +26,7 @@ class WorkoutSessionRepository {
   }
 
   Future<void> insert(WorkoutSession session) async {
+    log.d('[SessionRepo] insert: workoutId=${session.workoutId} date=${session.date}');
     final db = await _db.database;
     await db.insert('workout_sessions', session.toMap());
   }
