@@ -130,8 +130,39 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                                 : notesCtrl.text.trim(),
                             sets: sets,
                           );
-                          await logRepo.insert(log);
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          try {
+                            await logRepo.insert(log);
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                              showDialog(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Log successful'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Close'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          } catch (_) {
+                            if (ctx.mounted) {
+                              showDialog(
+                                context: ctx,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Exercise log failed'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Close'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          }
                         },
                         child: const Text('Log Entry'),
                       ),
