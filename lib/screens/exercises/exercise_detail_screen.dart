@@ -43,7 +43,10 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   }
 
   void _showLogDialog(BuildContext context, ExerciseLogRepository logRepo) {
-    List<SetChild> sets = List.of(_exercise.setTemplate.sets);
+    List<SetChild> sets = _exercise.setTemplate.sets
+        .map((s) => s.copyWith())
+        .map((s) => SetChild(id: _uuid.v4(), reps: s.reps, weight: s.weight, unit: s.unit))
+        .toList();
     DateTime date = DateTime.now();
     final notesCtrl = TextEditingController();
 
