@@ -21,7 +21,9 @@ class DatePickerField extends StatelessWidget {
           context: context,
           initialDate: date,
           firstDate: DateTime(2000),
-          lastDate: DateTime.now().add(const Duration(days: 1)),
+          lastDate: DateTime(2100),
+          selectableDayPredicate: null,
+          currentDate: DateTime.now(),
         );
         if (picked != null) onChanged(picked);
       },
