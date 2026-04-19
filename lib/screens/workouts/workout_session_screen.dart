@@ -69,7 +69,8 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Log Session')),
-      body: _workouts.isEmpty
+      body: SafeArea(
+        child: _workouts.isEmpty
           ? const Center(child: Text('No workouts yet. Create one first.'))
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -105,6 +106,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                 ),
               ],
             ),
+        ),
     );
   }
 }

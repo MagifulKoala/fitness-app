@@ -57,7 +57,9 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                 left: 16,
                 right: 16,
                 top: 16,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom +
+                    MediaQuery.of(ctx).viewPadding.bottom +
+                    16,
               ),
               child: SingleChildScrollView(
                 child: Column(
