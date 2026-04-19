@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../app_repositories.dart';
+import '../../core/app_logger.dart';
 import '../../models/workout.dart';
 import '../../models/workout_session.dart';
 import '../../repositories/workout_repository.dart';
@@ -54,12 +55,23 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       date: _date,
       notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
     );
-    await sessionRepo.insert(session);
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session logged!')),
-      );
+    try {
+      await sessionRepo.insert(session);
+      log.d('[WorkoutSession] session saved: workoutId=${session.workoutId}');
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session logged!')),
+        );
+      }
+    } catch (e, st) {
+      log.e('[WorkoutSession] save failed', error: e, stackTrace: st);
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save session.')),
+        );
+      }
     }
   }
 

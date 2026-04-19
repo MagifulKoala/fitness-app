@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/app_logger.dart';
 import '../../db/database_helper.dart';
 
 class DataScreen extends StatelessWidget {
@@ -26,12 +27,22 @@ class DataScreen extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      await DatabaseHelper.instance.clearAll();
-      onDataCleared();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All data cleared.')),
-        );
+      try {
+        await DatabaseHelper.instance.clearAll();
+        log.w('[DataScreen] all data cleared by user');
+        onDataCleared();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('All data cleared.')),
+          );
+        }
+      } catch (e, st) {
+        log.e('[DataScreen] clearAll failed', error: e, stackTrace: st);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to clear data.')),
+          );
+        }
       }
     }
   }

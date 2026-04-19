@@ -69,6 +69,25 @@ No external state management library. Repositories are passed via `AppRepositori
 | `fl_chart` | Line charts for progress views |
 | `intl` | Date formatting (dd/MM/yy display, ISO 8601 storage) |
 | `equatable` | Value equality for model classes |
+| `logger` | Structured console logging (debug/info/warn/error) |
+
+## Logging
+
+A shared `Logger` instance lives at `lib/core/app_logger.dart` — import and use `log.d/i/w/e` anywhere.
+
+| Level | Usage |
+|---|---|
+| `log.d` | Normal mutations (insert, update, delete) in repositories |
+| `log.w` | Significant irreversible actions (clearAll) |
+| `log.e` | Caught exceptions — always pass `error:` and `stackTrace:` |
+
+Filter on device with:
+```powershell
+flutter logs 2>&1 | sls "flutter"   # PowerShell
+```
+```bash
+adb logcat flutter:E *:S            # errors only
+```
 
 ## Database Notes
 
@@ -90,8 +109,14 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 ## Recent Changes
 
 - **Workout detail → exercise navigation**: Exercises listed in `WorkoutDetailScreen` are now tappable `ListTile`s with a chevron; tapping navigates to `ExerciseDetailScreen` (same view as the Exercises tab, including the Log FAB).
-- **Date picker**: `DatePickerField` now allows any date from 2000 to `DateTime(9999,12,31)`. Today is always highlighted via `currentDate: DateTime.now()`.
-- **Android system nav bar**: Bottom sheets (`ExerciseDetailScreen`, `MeasurementDetailScreen`) now add `MediaQuery.viewPadding.bottom` to their padding so the action button is never hidden behind the Android gesture/button bar. `WorkoutSessionScreen` body is wrapped in `SafeArea` for the same reason.
+- **Date picker**: `DatePickerField` allows any date from 2000 to `DateTime(9999,12,31)`. Today always highlighted.
+- **Android system nav bar**: Bottom sheets add `MediaQuery.viewPadding.bottom` to padding. `WorkoutSessionScreen` body wrapped in `SafeArea`.
+- **Exercise log fix**: Log sets now get fresh UUIDs each time to prevent `UNIQUE constraint` violations on repeat logs.
+- **Settings tab**: New bottom nav entry → `SettingsScreen` → `DataScreen` with "Clear all data" (confirmation alert, full screen refresh after wipe).
+- **Progress tab refresh**: Uses `GlobalKey<ProgressScreenState>` so switching to the tab always fetches fresh data.
+- **Progress table**: Scrolls vertically and horizontally. Chart line shows dots at every data point.
+- **Edit/delete log entries**: Both `ExerciseProgressScreen` and `MeasurementProgressScreen` table views have an edit icon per row opening an edit sheet with dirty-state Save button and Delete with confirmation.
+- **Logging**: `package:logger` added. All repositories log mutations at `d` level. Errors logged at `e` level with stack traces. `clearAll` logged at `w` level. Shared instance at `lib/core/app_logger.dart`.
 
 ### CLAUDE.md
 Make sure to update the claude.md file with any major changes
