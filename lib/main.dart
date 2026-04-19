@@ -12,6 +12,7 @@ import 'repositories/workout_session_repository.dart';
 import 'screens/body/measurement_list_screen.dart';
 import 'screens/exercises/exercise_list_screen.dart';
 import 'screens/progress/progress_screen.dart';
+import 'screens/settings/settings_screen.dart';
 import 'screens/workouts/workout_list_screen.dart';
 
 void main() async {
@@ -92,6 +93,7 @@ class _MainShellState extends State<_MainShell> {
         logRepo: repos.exerciseLogRepo,
         measurementRepo: repos.measurementRepo,
       ),
+      const SettingsScreen(),
     ];
 
     return Scaffold(
@@ -118,6 +120,10 @@ class _MainShellState extends State<_MainShell> {
           NavigationDestination(
             icon: Icon(Icons.show_chart),
             label: 'Progress',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
