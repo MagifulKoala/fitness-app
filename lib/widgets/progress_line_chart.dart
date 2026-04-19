@@ -68,7 +68,7 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
                       spots: s.spots,
                       color: s.color,
                       isCurved: true,
-                      dotData: const FlDotData(show: false),
+                      dotData: const FlDotData(show: true),
                       barWidth: 2,
                     ),
                   )

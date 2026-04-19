@@ -13,6 +13,8 @@ class ProgressTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
@@ -27,6 +29,7 @@ class ProgressTable extends StatelessWidget {
               ),
             )
             .toList(),
+        ),
       ),
     );
   }
