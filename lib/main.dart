@@ -73,6 +73,7 @@ class _MainShell extends StatefulWidget {
 
 class _MainShellState extends State<_MainShell> {
   int _index = 0;
+  final _progressKey = GlobalKey<ProgressScreenState>();
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +87,7 @@ class _MainShellState extends State<_MainShell> {
       ),
       MeasurementListScreen(measurementRepo: repos.measurementRepo),
       ProgressScreen(
+        key: _progressKey,
         exerciseRepo: repos.exerciseRepo,
         logRepo: repos.exerciseLogRepo,
         measurementRepo: repos.measurementRepo,
@@ -96,7 +98,10 @@ class _MainShellState extends State<_MainShell> {
       body: IndexedStack(index: _index, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          setState(() => _index = i);
+          if (i == 3) _progressKey.currentState?.reload();
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.fitness_center),

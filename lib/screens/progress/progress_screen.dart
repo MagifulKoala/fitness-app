@@ -20,10 +20,10 @@ class ProgressScreen extends StatefulWidget {
   });
 
   @override
-  State<ProgressScreen> createState() => _ProgressScreenState();
+  State<ProgressScreen> createState() => ProgressScreenState();
 }
 
-class _ProgressScreenState extends State<ProgressScreen>
+class ProgressScreenState extends State<ProgressScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   List<Exercise> _exercises = [];
@@ -42,6 +42,8 @@ class _ProgressScreenState extends State<ProgressScreen>
     _tabCtrl.dispose();
     super.dispose();
   }
+
+  void reload() => _load();
 
   Future<void> _load() async {
     setState(() => _loading = true);

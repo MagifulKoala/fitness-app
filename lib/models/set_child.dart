@@ -16,8 +16,10 @@ class SetChild extends Equatable {
   Map<String, dynamic> toMap({String? setTemplateId, String? logId}) {
     return {
       'id': id,
-      'set_template_id': ?setTemplateId,
-      'log_id': ?logId,
+      // ignore: use_null_aware_elements
+      if (setTemplateId != null) 'set_template_id': setTemplateId,
+      // ignore: use_null_aware_elements
+      if (logId != null) 'log_id': logId,
       'reps': reps,
       'weight': weight,
       'unit': unit,
