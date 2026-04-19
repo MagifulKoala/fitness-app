@@ -3,6 +3,7 @@ import '../../app_repositories.dart';
 import '../../models/exercise.dart';
 import '../../models/workout.dart';
 import '../../repositories/workout_repository.dart';
+import '../exercises/exercise_detail_screen.dart';
 import 'workout_form_screen.dart';
 
 class WorkoutDetailScreen extends StatefulWidget {
@@ -131,6 +132,19 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                           style: const TextStyle(fontSize: 11)),
                     ),
                     title: Text(e.value.name),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      final repos = AppRepositories.of(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ExerciseDetailScreen(
+                            exercise: e.value,
+                            exerciseRepo: repos.exerciseRepo,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
         ],
