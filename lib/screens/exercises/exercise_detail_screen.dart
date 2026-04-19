@@ -137,6 +137,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                               showDialog(
                                 context: context,
                                 builder: (_) => AlertDialog(
+                                  backgroundColor: const Color(0xFFB7F0C2),
                                   title: const Text('Log successful'),
                                   actions: [
                                     TextButton(
@@ -152,6 +153,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                               showDialog(
                                 context: ctx,
                                 builder: (_) => AlertDialog(
+                                  backgroundColor: const Color(0xFFFFC1C1),
                                   title: const Text('Exercise log failed'),
                                   actions: [
                                     TextButton(
