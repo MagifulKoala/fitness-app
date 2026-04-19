@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback onDataCleared;
+
+  const SettingsScreen({super.key, required this.onDataCleared});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +18,9 @@ class SettingsScreen extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const DataScreen()),
+              MaterialPageRoute(
+                builder: (_) => DataScreen(onDataCleared: onDataCleared),
+              ),
             ),
           ),
         ],

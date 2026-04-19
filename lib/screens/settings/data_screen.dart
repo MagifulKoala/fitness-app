@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../db/database_helper.dart';
 
 class DataScreen extends StatelessWidget {
-  const DataScreen({super.key});
+  final VoidCallback onDataCleared;
+
+  const DataScreen({super.key, required this.onDataCleared});
 
   Future<void> _clearAll(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -25,6 +27,7 @@ class DataScreen extends StatelessWidget {
 
     if (confirmed == true) {
       await DatabaseHelper.instance.clearAll();
+      onDataCleared();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('All data cleared.')),

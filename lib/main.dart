@@ -74,7 +74,10 @@ class _MainShell extends StatefulWidget {
 
 class _MainShellState extends State<_MainShell> {
   int _index = 0;
+  int _resetKey = 0;
   final _progressKey = GlobalKey<ProgressScreenState>();
+
+  void _onDataCleared() => setState(() => _resetKey++);
 
   @override
   Widget build(BuildContext context) {
@@ -93,11 +96,11 @@ class _MainShellState extends State<_MainShell> {
         logRepo: repos.exerciseLogRepo,
         measurementRepo: repos.measurementRepo,
       ),
-      const SettingsScreen(),
+      SettingsScreen(onDataCleared: _onDataCleared),
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: screens),
+      body: IndexedStack(key: ValueKey(_resetKey), index: _index, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
