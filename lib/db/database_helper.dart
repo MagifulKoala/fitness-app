@@ -139,6 +139,30 @@ class DatabaseHelper {
     await db.insert('measurements', {'id': weightId, 'name': 'Weight'});
   }
 
+  Future<void> clearAll() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final table in [
+        'exercise_log_sets',
+        'exercise_logs',
+        'set_children',
+        'set_templates',
+        'exercises',
+        'workout_exercises',
+        'workout_plan_entries',
+        'workout_plans',
+        'workout_sessions',
+        'workouts',
+        'measurement_entries',
+        'measurements',
+      ]) {
+        await txn.delete(table);
+      }
+      final weightId = const Uuid().v4();
+      await txn.insert('measurements', {'id': weightId, 'name': 'Weight'});
+    });
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Future migrations go here
   }
