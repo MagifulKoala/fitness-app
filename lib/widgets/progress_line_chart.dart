@@ -19,11 +19,13 @@ class ChartSeries {
 class ProgressLineChart extends StatefulWidget {
   final List<ChartSeries> series;
   final List<DateTime> dates; // parallel to x-axis indices
+  final void Function(int spotIndex)? onSpotTouched;
 
   const ProgressLineChart({
     super.key,
     required this.series,
     required this.dates,
+    this.onSpotTouched,
   });
 
   @override
@@ -68,11 +70,31 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
                       spots: s.spots,
                       color: s.color,
                       isCurved: true,
-                      dotData: const FlDotData(show: true),
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, percent, bar, index) =>
+                            FlDotCirclePainter(
+                              radius: 6,
+                              color: bar.color ?? Colors.blue,
+                              strokeColor: Colors.white,
+                              strokeWidth: 1.5,
+                            ),
+                      ),
                       barWidth: 2,
                     ),
                   )
                   .toList(),
+              lineTouchData: LineTouchData(
+                handleBuiltInTouches: false,
+                touchCallback: (event, response) {
+                  if (event is FlTapUpEvent &&
+                      response?.lineBarSpots != null &&
+                      response!.lineBarSpots!.isNotEmpty) {
+                    final spotIndex = response.lineBarSpots!.first.spotIndex;
+                    widget.onSpotTouched?.call(spotIndex);
+                  }
+                },
+              ),
               titlesData: FlTitlesData(
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(

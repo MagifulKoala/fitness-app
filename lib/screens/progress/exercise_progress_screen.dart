@@ -61,7 +61,11 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
                 ? const Center(child: Text('No logs yet.'))
                 : TabBarView(
                     children: [
-                      _GraphView(logs: _logs),
+                      _GraphView(
+                        logs: _logs,
+                        logRepo: widget.logRepo,
+                        onChanged: () => _load(),
+                      ),
                       _TableView(
                         logs: _logs,
                         logRepo: widget.logRepo,
@@ -76,32 +80,154 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
 
 // ── Graph ────────────────────────────────────────────────────────────────────
 
-class _GraphView extends StatelessWidget {
+class _GraphView extends StatefulWidget {
   final List<ExerciseLog> logs;
-  const _GraphView({required this.logs});
+  final ExerciseLogRepository logRepo;
+  final VoidCallback onChanged;
+
+  const _GraphView({
+    required this.logs,
+    required this.logRepo,
+    required this.onChanged,
+  });
+
+  @override
+  State<_GraphView> createState() => _GraphViewState();
+}
+
+class _GraphViewState extends State<_GraphView> {
+  ExerciseLog? _selectedLog;
+
+  void _onSpotTouched(int index) {
+    final log = index >= 0 && index < widget.logs.length ? widget.logs[index] : null;
+    setState(() => _selectedLog = (_selectedLog?.id == log?.id) ? null : log);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final weightSpots = logs
+    final weightSpots = widget.logs
         .asMap()
         .entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.avgWeight))
         .toList();
-    final volumeSpots = logs
+    final volumeSpots = widget.logs
         .asMap()
         .entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.volume))
         .toList();
-    final dates = logs.map((l) => l.date).toList();
+    final dates = widget.logs.map((l) => l.date).toList();
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: ProgressLineChart(
-        series: [
-          ChartSeries(label: 'Avg Weight', spots: weightSpots, color: Colors.blue),
-          ChartSeries(label: 'Volume', spots: volumeSpots, color: Colors.orange),
-        ],
-        dates: dates,
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ProgressLineChart(
+              series: [
+                ChartSeries(label: 'Avg Weight', spots: weightSpots, color: Colors.blue),
+                ChartSeries(label: 'Volume', spots: volumeSpots, color: Colors.orange),
+              ],
+              dates: dates,
+              onSpotTouched: _onSpotTouched,
+            ),
+            if (_selectedLog != null) ...[
+              const SizedBox(height: 16),
+              _LogDetailPanel(
+                log: _selectedLog!,
+                logRepo: widget.logRepo,
+                onClose: () => setState(() => _selectedLog = null),
+                onChanged: () {
+                  setState(() => _selectedLog = null);
+                  widget.onChanged();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Log detail panel ─────────────────────────────────────────────────────────
+
+class _LogDetailPanel extends StatelessWidget {
+  final ExerciseLog log;
+  final ExerciseLogRepository logRepo;
+  final VoidCallback onClose;
+  final VoidCallback onChanged;
+
+  const _LogDetailPanel({
+    required this.log,
+    required this.logRepo,
+    required this.onClose,
+    required this.onChanged,
+  });
+
+  void _openEdit(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ExerciseLogEditSheet(
+        log: log,
+        logRepo: logRepo,
+        onSaved: onChanged,
+        onDeleted: onChanged,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  DateFormat('dd/MM/yyyy').format(log.date),
+                  style: theme.textTheme.titleMedium,
+                ),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: const Text('Edit'),
+                      onPressed: () => _openEdit(context),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: onClose,
+                      tooltip: 'Close',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (log.notes != null && log.notes!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(log.notes!, style: theme.textTheme.bodySmall),
+            ],
+            const SizedBox(height: 8),
+            ...log.sets.asMap().entries.map((e) {
+              final s = e.value;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  'Set ${e.key + 1}: ${s.reps} reps × ${s.weight} ${s.unit}',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
