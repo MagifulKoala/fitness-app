@@ -1,3 +1,4 @@
+import 'package:sqflite/sqflite.dart';
 import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/exercise_log.dart';
@@ -26,18 +27,7 @@ class ExerciseLogRepository {
       whereArgs: [exerciseId],
       orderBy: 'date DESC',
     );
-    final result = <ExerciseLog>[];
-    for (final row in rows) {
-      final logId = row['id'] as String;
-      final setRows = await db.query(
-        'exercise_log_sets',
-        where: 'log_id = ?',
-        whereArgs: [logId],
-      );
-      final sets = setRows.map((r) => SetChild.fromMap(r)).toList();
-      result.add(ExerciseLog.fromMap(row, sets));
-    }
-    return result;
+    return _hydrateLogs(db, rows);
   }
 
   Future<List<ExerciseLog>> getByDateRange(DateTime from, DateTime to) async {
@@ -49,17 +39,31 @@ class ExerciseLogRepository {
       whereArgs: [from.toIso8601String(), toNext.toIso8601String()],
       orderBy: 'date ASC',
     );
-    final result = <ExerciseLog>[];
-    for (final row in rows) {
-      final logId = row['id'] as String;
-      final setRows = await db.query(
-        'exercise_log_sets',
-        where: 'log_id = ?',
-        whereArgs: [logId],
-      );
-      result.add(ExerciseLog.fromMap(row, setRows.map(SetChild.fromMap).toList()));
+    return _hydrateLogs(db, rows);
+  }
+
+  // Batch-fetches all sets for the given log rows in a single query,
+  // eliminating the N+1 pattern of one query per log.
+  Future<List<ExerciseLog>> _hydrateLogs(
+      Database db, List<Map<String, dynamic>> rows) async {
+    if (rows.isEmpty) return [];
+    final logIds = rows.map((r) => r['id'] as String).toList();
+    final placeholders = List.filled(logIds.length, '?').join(',');
+    final setRows = await db.rawQuery(
+      'SELECT * FROM exercise_log_sets WHERE log_id IN ($placeholders)',
+      logIds,
+    );
+    final setsByLogId = <String, List<SetChild>>{};
+    for (final row in setRows) {
+      final logId = row['log_id'] as String;
+      setsByLogId.putIfAbsent(logId, () => []).add(SetChild.fromMap(row));
     }
-    return result;
+    return rows
+        .map((row) => ExerciseLog.fromMap(
+              row,
+              setsByLogId[row['id'] as String] ?? [],
+            ))
+        .toList();
   }
 
   Future<void> update(ExerciseLog exerciseLog) async {

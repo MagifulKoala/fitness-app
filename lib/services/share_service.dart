@@ -24,6 +24,8 @@ class ShareService {
   static final _dateFmt = DateFormat('dd MMM yyyy');
   static final _dayFmt = DateFormat('EEE, dd MMM');
 
+  static String _isoDate(DateTime dt) => dt.toIso8601String().substring(0, 10);
+
   // ─── Export workout plan ───────────────────────────────────────────────────
 
   static Future<void> exportWorkoutPlan(
@@ -33,29 +35,49 @@ class ShareService {
     BuildContext context,
   ) async {
     try {
-      final entries = <Map<String, dynamic>>[];
-      final workoutCache = <String, Workout?>{};
-      final exerciseCache = <String, Exercise?>{};
+      // Batch-fetch all unique workouts, then all unique exercises upfront.
+      final uniqueWorkoutIds = plan.entries.map((e) => e.workoutId).toSet().toList();
+      final workoutResults = await Future.wait(
+          uniqueWorkoutIds.map(workoutRepo.getById));
+      final workoutById = <String, Workout>{
+        for (var i = 0; i < uniqueWorkoutIds.length; i++)
+          if (workoutResults[i] != null)
+            uniqueWorkoutIds[i]: workoutResults[i]!,
+      };
 
+      final uniqueExerciseIds = workoutById.values
+          .expand((w) => w.exerciseIds)
+          .toSet()
+          .toList();
+      final exerciseResults = await Future.wait(
+          uniqueExerciseIds.map(exerciseRepo.getById));
+      final exerciseById = <String, Exercise>{
+        for (var i = 0; i < uniqueExerciseIds.length; i++)
+          if (exerciseResults[i] != null)
+            uniqueExerciseIds[i]: exerciseResults[i]!,
+      };
+
+      final entries = <Map<String, dynamic>>[];
       for (final entry in plan.entries) {
-        final workout = workoutCache[entry.workoutId] ??=
-            await workoutRepo.getById(entry.workoutId);
+        final workout = workoutById[entry.workoutId];
         if (workout == null) continue;
 
-        final exercisesJson = <Map<String, dynamic>>[];
-        for (final exId in workout.exerciseIds) {
-          final exercise =
-              exerciseCache[exId] ??= await exerciseRepo.getById(exId);
-          if (exercise == null) continue;
-          exercisesJson.add({
-            'name': exercise.name,
-            'aliases': exercise.aliases,
-            'notes': exercise.notes,
-            'sets': exercise.setTemplate.sets
-                .map((s) => {'reps': s.reps, 'weight': s.weight, 'unit': s.unit})
-                .toList(),
-          });
-        }
+        final exercisesJson = workout.exerciseIds
+            .map((id) => exerciseById[id])
+            .whereType<Exercise>()
+            .map((exercise) => {
+                  'name': exercise.name,
+                  'aliases': exercise.aliases,
+                  'notes': exercise.notes,
+                  'sets': exercise.setTemplate.sets
+                      .map((s) => {
+                            'reps': s.reps,
+                            'weight': s.weight,
+                            'unit': s.unit,
+                          })
+                      .toList(),
+                })
+            .toList();
 
         entries.add({
           'day_of_week': entry.dayOfWeek,
@@ -100,16 +122,26 @@ class ShareService {
   ) async {
     try {
       final logs = await logRepo.getByDateRange(from, to);
-      final allExercises = await exerciseRepo.getAll();
-      final exerciseById = {for (final e in allExercises) e.id: e};
+
+      // Fetch only the exercises that appear in these logs.
+      final uniqueExerciseIds = logs.map((l) => l.exerciseId).toSet().toList();
+      final exerciseResults = await Future.wait(
+          uniqueExerciseIds.map(exerciseRepo.getById));
+      final exerciseById = <String, Exercise>{
+        for (var i = 0; i < uniqueExerciseIds.length; i++)
+          if (exerciseResults[i] != null)
+            uniqueExerciseIds[i]: exerciseResults[i]!,
+      };
 
       final logsJson = logs
           .map((entry) => {
-                'exercise': exerciseById[entry.exerciseId]?.name ?? entry.exerciseId,
-                'date': entry.date.toIso8601String().substring(0, 10),
+                'exercise':
+                    exerciseById[entry.exerciseId]?.name ?? entry.exerciseId,
+                'date': _isoDate(entry.date),
                 'notes': entry.notes,
                 'sets': entry.sets
-                    .map((s) => {'reps': s.reps, 'weight': s.weight, 'unit': s.unit})
+                    .map((s) =>
+                        {'reps': s.reps, 'weight': s.weight, 'unit': s.unit})
                     .toList(),
               })
           .toList();
@@ -117,19 +149,19 @@ class ShareService {
       final payload = {
         'schema': 1,
         'type': 'exercise_logs',
-        'from': from.toIso8601String().substring(0, 10),
-        'to': to.toIso8601String().substring(0, 10),
+        'from': _isoDate(from),
+        'to': _isoDate(to),
         'logs': logsJson,
       };
 
       final text = _buildLogText(from, to, logs, exerciseById);
 
       final dir = await getTemporaryDirectory();
-      final tag =
-          '${from.toIso8601String().substring(0, 10)}_${to.toIso8601String().substring(0, 10)}';
+      final tag = '${_isoDate(from)}_${_isoDate(to)}';
       final jsonFile = File('${dir.path}/workout_log_$tag.json');
       final txtFile = File('${dir.path}/workout_log_$tag.txt');
-      await jsonFile.writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
+      await jsonFile
+          .writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
       await txtFile.writeAsString(text);
 
       log.d('[ShareService] exportLogs: $tag (${logs.length} entries)');
@@ -160,16 +192,13 @@ class ShareService {
 
     final byDate = <String, List<ExerciseLog>>{};
     for (final entry in logs) {
-      final key = entry.date.toIso8601String().substring(0, 10);
-      byDate.putIfAbsent(key, () => []).add(entry);
+      byDate.putIfAbsent(_isoDate(entry.date), () => []).add(entry);
     }
 
     for (final dateKey in byDate.keys.toList()..sort()) {
-      final date = DateTime.parse(dateKey);
-      buf.writeln(_dayFmt.format(date));
+      buf.writeln(_dayFmt.format(DateTime.parse(dateKey)));
       for (final entry in byDate[dateKey]!) {
-        final name = exerciseById[entry.exerciseId]?.name ?? entry.exerciseId;
-        buf.writeln('  $name');
+        buf.writeln('  ${exerciseById[entry.exerciseId]?.name ?? entry.exerciseId}');
         for (final s in entry.sets) {
           buf.writeln('    ${s.reps} × ${s.weight} ${s.unit}');
         }
@@ -216,7 +245,7 @@ class ShareService {
       final entriesData =
           (planData['entries'] as List).cast<Map<String, dynamic>>();
 
-      // Build exercise map, deduplicating by name (case-insensitive)
+      // Build exercise map, deduplicating by name (case-insensitive).
       final allExisting = await exerciseRepo.getAll();
       final existingByName = {
         for (final e in allExisting) e.name.toLowerCase(): e
@@ -255,7 +284,7 @@ class ShareService {
         }
       }
 
-      // Create workouts, deduplicating by name
+      // Create workouts, deduplicating by name.
       final workoutIdByName = <String, String>{};
       for (final entry in entriesData) {
         final workoutName = entry['workout_name'] as String;
@@ -277,7 +306,6 @@ class ShareService {
         workoutIdByName[workoutName] = workout.id;
       }
 
-      // Build plan
       final planEntries = entriesData
           .map((entry) => WorkoutPlanEntry(
                 id: _uuid.v4(),
