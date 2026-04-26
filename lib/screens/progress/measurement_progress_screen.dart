@@ -46,8 +46,8 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
   List<MeasurementEntry> _entries = [];
   bool _loading = true;
   ChartFilter _filter = ChartFilter.all;
-  late DateTime _customFrom;
-  late DateTime _customTo;
+  DateTime _customFrom = DateTime.now().subtract(const Duration(days: 29));
+  DateTime _customTo = DateTime.now();
 
   @override
   void initState() {
