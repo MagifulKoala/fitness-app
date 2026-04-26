@@ -237,6 +237,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         icon: const Icon(Icons.add_chart),
         label: const Text('Log'),
         onPressed: () => _showLogDialog(context, repos.exerciseLogRepo),

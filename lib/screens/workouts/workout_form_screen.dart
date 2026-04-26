@@ -26,11 +26,22 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
   late TextEditingController _notesCtrl;
+  final TextEditingController _searchCtrl = TextEditingController();
   List<String> _selectedExerciseIds = [];
   List<Exercise> _allExercises = [];
+  String _searchQuery = '';
   bool _saving = false;
 
   bool get _isEdit => widget.workout != null;
+
+  List<Exercise> get _filteredExercises {
+    final q = _searchQuery.toLowerCase().trim();
+    if (q.isEmpty) return _allExercises;
+    return _allExercises.where((ex) {
+      if (ex.name.toLowerCase().contains(q)) return true;
+      return ex.aliases.any((a) => a.toLowerCase().contains(q));
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -46,12 +57,23 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _notesCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
+  // Sort once at load time so currently-selected exercises appear first.
+  // Order is intentionally NOT re-computed on toggle — re-sorting while
+  // the user is checking boxes causes items to jump, which is disorienting.
   Future<void> _loadExercises() async {
     if (widget.exerciseRepo == null) return;
     final exercises = await widget.exerciseRepo!.getAll();
+    exercises.sort((a, b) {
+      final aSelected = _selectedExerciseIds.contains(a.id);
+      final bSelected = _selectedExerciseIds.contains(b.id);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      return a.name.compareTo(b.name);
+    });
     setState(() => _allExercises = exercises);
   }
 
@@ -81,6 +103,8 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _filteredExercises;
+
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? 'Edit Workout' : 'New Workout')),
       body: Form(
@@ -102,9 +126,29 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
             ),
             if (_allExercises.isNotEmpty) ...[
               const SizedBox(height: 20),
-              Text('Exercises',
-                  style: Theme.of(context).textTheme.titleMedium),
-              ..._allExercises.map((ex) {
+              Text('Exercises', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Search exercises…',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (v) => setState(() => _searchQuery = v),
+              ),
+              const SizedBox(height: 4),
+              ...filtered.map((ex) {
                 final selected = _selectedExerciseIds.contains(ex.id);
                 return CheckboxListTile(
                   title: Text(ex.name),
@@ -120,6 +164,15 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
                   },
                 );
               }),
+              if (filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'No exercises match "$_searchQuery"',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(

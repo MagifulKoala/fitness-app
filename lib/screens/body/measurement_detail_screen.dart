@@ -229,6 +229,7 @@ class _MeasurementDetailScreenState extends State<MeasurementDetailScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton(
+        heroTag: null,
         onPressed: () => _showEntryDialog(),
         child: const Icon(Icons.add),
       ),

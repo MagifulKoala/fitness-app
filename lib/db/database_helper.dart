@@ -25,7 +25,7 @@ class DatabaseHelper {
     final path = join(dir.path, 'workout_app.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -135,6 +135,13 @@ class DatabaseHelper {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
     // Seed default "Weight" measurement
     final weightId = const Uuid().v4();
     await db.insert('measurements', {'id': weightId, 'name': 'Weight'});
@@ -165,7 +172,18 @@ class DatabaseHelper {
     });
   }
 
+  // Each version bump adds a new `if (oldVersion < N)` block here so that
+  // devices upgrading from any older version receive every missing migration
+  // in sequence. Never modify earlier blocks — always add a new one.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Future migrations go here
+    if (oldVersion < 2) {
+      // v2: app-level preferences (theme mode, etc.)
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key   TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      ''');
+    }
   }
 }

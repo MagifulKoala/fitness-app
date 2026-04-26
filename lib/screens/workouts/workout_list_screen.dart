@@ -98,6 +98,7 @@ class _WorkoutListScreenState extends State<WorkoutListScreen>
               ],
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: null,
         child: const Icon(Icons.add),
         onPressed: () async {
           if (_tabCtrl.index == 0) {

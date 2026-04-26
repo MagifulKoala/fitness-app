@@ -97,6 +97,7 @@ class _MeasurementListScreenState extends State<MeasurementListScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton(
+        heroTag: null,
         onPressed: _showAddDialog,
         child: const Icon(Icons.add),
       ),

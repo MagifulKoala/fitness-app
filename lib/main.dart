@@ -6,6 +6,7 @@ import 'db/database_helper.dart';
 import 'repositories/exercise_log_repository.dart';
 import 'repositories/exercise_repository.dart';
 import 'repositories/measurement_repository.dart';
+import 'repositories/settings_repository.dart';
 import 'repositories/workout_plan_repository.dart';
 import 'repositories/workout_repository.dart';
 import 'repositories/workout_session_repository.dart';
@@ -35,6 +36,7 @@ void main() async {
   final planRepo = WorkoutPlanRepository(db);
   final sessionRepo = WorkoutSessionRepository(db);
   final measurementRepo = MeasurementRepository(db);
+  final settingsRepo = SettingsRepository(db);
 
   runApp(
     AppRepositories(
@@ -44,13 +46,42 @@ void main() async {
       planRepo: planRepo,
       sessionRepo: sessionRepo,
       measurementRepo: measurementRepo,
-      child: const WorkoutApp(),
+      child: WorkoutApp(settingsRepo: settingsRepo),
     ),
   );
 }
 
-class WorkoutApp extends StatelessWidget {
-  const WorkoutApp({super.key});
+class WorkoutApp extends StatefulWidget {
+  final SettingsRepository settingsRepo;
+
+  const WorkoutApp({super.key, required this.settingsRepo});
+
+  @override
+  State<WorkoutApp> createState() => _WorkoutAppState();
+}
+
+class _WorkoutAppState extends State<WorkoutApp> {
+  ThemeMode _themeMode = ThemeMode.light;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+  }
+
+  // Loaded async rather than before runApp to avoid a crash if the DB
+  // migration hasn't fully committed yet on first launch after an upgrade.
+  // The SQLite read is fast enough (~1–2 frames) that the light→dark
+  // transition is imperceptible in practice.
+  Future<void> _loadThemeMode() async {
+    final mode = await widget.settingsRepo.getThemeMode();
+    if (mounted) setState(() => _themeMode = mode);
+  }
+
+  void _onThemeModeChanged(ThemeMode mode) {
+    setState(() => _themeMode = mode);
+    widget.settingsRepo.setThemeMode(mode);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,13 +91,30 @@ class WorkoutApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const _MainShell(),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: _themeMode,
+      home: _MainShell(
+        themeMode: _themeMode,
+        onThemeModeChanged: _onThemeModeChanged,
+      ),
     );
   }
 }
 
 class _MainShell extends StatefulWidget {
-  const _MainShell();
+  final ThemeMode themeMode;
+  final void Function(ThemeMode) onThemeModeChanged;
+
+  const _MainShell({
+    required this.themeMode,
+    required this.onThemeModeChanged,
+  });
 
   @override
   State<_MainShell> createState() => _MainShellState();
@@ -96,7 +144,11 @@ class _MainShellState extends State<_MainShell> {
         logRepo: repos.exerciseLogRepo,
         measurementRepo: repos.measurementRepo,
       ),
-      SettingsScreen(onDataCleared: _onDataCleared),
+      SettingsScreen(
+        onDataCleared: _onDataCleared,
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
+      ),
     ];
 
     return Scaffold(

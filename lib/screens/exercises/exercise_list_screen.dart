@@ -95,7 +95,11 @@ class _ExerciseListScreenState extends State<ExerciseListScreen> {
           ),
         ],
       ),
+      // heroTag: null on every FAB — IndexedStack keeps all tab screens mounted
+      // simultaneously, so multiple FABs share the tree. Without a unique tag
+      // Flutter throws a "multiple heroes with the same tag" assertion.
       floatingActionButton: FloatingActionButton(
+        heroTag: null,
         child: const Icon(Icons.add),
         onPressed: () async {
           await Navigator.push(
