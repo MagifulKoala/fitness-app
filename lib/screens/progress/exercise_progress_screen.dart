@@ -76,12 +76,12 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
   }
 
   List<ExerciseLog> get _filteredLogs {
+    if (_filter == ChartFilter.all) return _logs;
     final start = windowStart(_filter, _customFrom);
     final end = windowEnd(_filter, _customTo);
-    final endNext = end.add(const Duration(days: 1));
     return _logs.where((l) {
       final d = DateTime(l.date.year, l.date.month, l.date.day);
-      return !d.isBefore(start) && d.isBefore(endNext);
+      return !d.isBefore(start) && !d.isAfter(end);
     }).toList();
   }
 
@@ -194,6 +194,8 @@ class _GraphViewState extends State<_GraphView> {
         .toList();
     final dates = points.map((p) => p.date).toList();
     final isRaw = widget.granularity == ChartGranularity.raw;
+    // Always show dots for a single point — a line needs 2+ spots.
+    final showDots = widget.showDots || points.length <= 1;
 
     return SingleChildScrollView(
       child: Padding(
@@ -213,7 +215,7 @@ class _GraphViewState extends State<_GraphView> {
                     color: Colors.orange),
               ],
               dates: dates,
-              showDots: widget.showDots,
+              showDots: showDots,
               onSpotTouched: isRaw ? _onSpotTouched : null,
             ),
             if (_selectedLog != null && isRaw) ...[

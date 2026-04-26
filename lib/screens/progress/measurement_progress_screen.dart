@@ -68,12 +68,12 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
   }
 
   List<MeasurementEntry> get _filteredEntries {
+    if (_filter == ChartFilter.all) return _entries;
     final start = windowStart(_filter, _customFrom);
     final end = windowEnd(_filter, _customTo);
-    final endNext = end.add(const Duration(days: 1));
     return _entries.where((e) {
       final d = DateTime(e.date.year, e.date.month, e.date.day);
-      return !d.isBefore(start) && d.isBefore(endNext);
+      return !d.isBefore(start) && !d.isAfter(end);
     }).toList();
   }
 
@@ -154,6 +154,7 @@ class _GraphView extends StatelessWidget {
         .toList();
     final dates = points.map((p) => p.date).toList();
     final unit = points.isNotEmpty ? points.first.unit : '';
+    final effectiveShowDots = showDots || points.length <= 1;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -162,7 +163,7 @@ class _GraphView extends StatelessWidget {
           ChartSeries(label: unit, spots: spots, color: Colors.blue),
         ],
         dates: dates,
-        showDots: showDots,
+        showDots: effectiveShowDots,
       ),
     );
   }

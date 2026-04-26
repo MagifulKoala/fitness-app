@@ -20,6 +20,7 @@ DateTime windowStart(ChartFilter filter, DateTime customFrom) {
 
 DateTime windowEnd(ChartFilter filter, DateTime customTo) {
   if (filter == ChartFilter.custom) return customTo;
+  if (filter == ChartFilter.all) return DateTime(9999, 12, 30); // include future-dated entries
   final now = DateTime.now();
   return DateTime(now.year, now.month, now.day);
 }
