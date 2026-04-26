@@ -19,12 +19,14 @@ class ChartSeries {
 class ProgressLineChart extends StatefulWidget {
   final List<ChartSeries> series;
   final List<DateTime> dates; // parallel to x-axis indices
+  final bool showDots;
   final void Function(int spotIndex)? onSpotTouched;
 
   const ProgressLineChart({
     super.key,
     required this.series,
     required this.dates,
+    this.showDots = true,
     this.onSpotTouched,
   });
 
@@ -39,6 +41,14 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
   void initState() {
     super.initState();
     _series = widget.series;
+  }
+
+  static double _xInterval(int count) {
+    if (count <= 7) return 1;
+    if (count <= 14) return 2;
+    if (count <= 31) return 5;
+    if (count <= 52) return 4;
+    return 6;
   }
 
   @override
@@ -71,7 +81,7 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
                       color: s.color,
                       isCurved: true,
                       dotData: FlDotData(
-                        show: true,
+                        show: widget.showDots,
                         getDotPainter: (spot, percent, bar, index) =>
                             FlDotCirclePainter(
                               radius: 6,
@@ -99,7 +109,7 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    interval: 1,
+                    interval: _xInterval(widget.dates.length),
                     getTitlesWidget: (value, meta) {
                       final idx = value.toInt();
                       if (idx < 0 || idx >= widget.dates.length) {

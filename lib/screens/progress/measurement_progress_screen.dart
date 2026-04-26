@@ -4,8 +4,28 @@ import 'package:intl/intl.dart';
 import '../../models/measurement.dart';
 import '../../models/measurement_entry.dart';
 import '../../repositories/measurement_repository.dart';
+import '../../widgets/chart_filter_bar.dart';
 import '../../widgets/date_picker_field.dart';
 import '../../widgets/progress_line_chart.dart';
+
+// Aggregate measurement entries into (date, value, unit) points.
+// In raw mode returns one point per entry; otherwise collapses by period averaging values.
+List<({DateTime date, double value, String unit})> _aggregateEntries(
+    List<MeasurementEntry> entries, ChartGranularity granularity) {
+  if (granularity == ChartGranularity.raw) {
+    return entries.map((e) => (date: e.date, value: e.value, unit: e.unit)).toList();
+  }
+  final groups = <String, List<MeasurementEntry>>{};
+  for (final entry in entries) {
+    groups.putIfAbsent(periodKey(entry.date, granularity), () => []).add(entry);
+  }
+  final sortedKeys = groups.keys.toList()..sort();
+  return sortedKeys.map((key) {
+    final g = groups[key]!;
+    final avg = g.fold(0.0, (s, e) => s + e.value) / g.length;
+    return (date: g.first.date, value: avg, unit: g.first.unit);
+  }).toList();
+}
 
 class MeasurementProgressScreen extends StatefulWidget {
   final Measurement measurement;
@@ -25,10 +45,16 @@ class MeasurementProgressScreen extends StatefulWidget {
 class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
   List<MeasurementEntry> _entries = [];
   bool _loading = true;
+  ChartFilter _filter = ChartFilter.all;
+  late DateTime _customFrom;
+  late DateTime _customTo;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _customTo = DateTime(now.year, now.month, now.day);
+    _customFrom = _customTo.subtract(const Duration(days: 29));
     _load();
   }
 
@@ -36,13 +62,27 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
     setState(() => _loading = true);
     final entries = await widget.measurementRepo.getEntries(widget.measurement.id);
     setState(() {
-      _entries = entries;
+      _entries = entries; // ASC: oldest first
       _loading = false;
     });
   }
 
+  List<MeasurementEntry> get _filteredEntries {
+    final start = windowStart(_filter, _customFrom);
+    final end = windowEnd(_filter, _customTo);
+    final endNext = end.add(const Duration(days: 1));
+    return _entries.where((e) {
+      final d = DateTime(e.date.year, e.date.month, e.date.day);
+      return !d.isBefore(start) && d.isBefore(endNext);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredEntries = _filteredEntries;
+    final granularity = granularityFor(_filter, _customFrom, _customTo);
+    final dots = showDots(_filter, _customFrom, _customTo);
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -54,18 +94,38 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _entries.isEmpty
-                ? const Center(child: Text('No data yet.'))
-                : TabBarView(
-                    children: [
-                      _GraphView(entries: _entries),
-                      _TableView(
-                        entries: _entries,
-                        measurementRepo: widget.measurementRepo,
-                        onChanged: () => _load(),
-                      ),
-                    ],
+            : Column(
+                children: [
+                  ChartFilterBar(
+                    selected: _filter,
+                    customFrom: _customFrom,
+                    customTo: _customTo,
+                    onFilterChanged: (f) => setState(() => _filter = f),
+                    onFromChanged: (d) => setState(() => _customFrom = d),
+                    onToChanged: (d) => setState(() => _customTo = d),
                   ),
+                  Expanded(
+                    child: _entries.isEmpty
+                        ? const Center(child: Text('No data yet.'))
+                        : filteredEntries.isEmpty
+                            ? const Center(child: Text('No data in this period.'))
+                            : TabBarView(
+                                children: [
+                                  _GraphView(
+                                    entries: filteredEntries,
+                                    granularity: granularity,
+                                    showDots: dots,
+                                  ),
+                                  _TableView(
+                                    entries: filteredEntries,
+                                    measurementRepo: widget.measurementRepo,
+                                    onChanged: () => _load(),
+                                  ),
+                                ],
+                              ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -75,24 +135,34 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
 
 class _GraphView extends StatelessWidget {
   final List<MeasurementEntry> entries;
-  const _GraphView({required this.entries});
+  final ChartGranularity granularity;
+  final bool showDots;
+
+  const _GraphView({
+    required this.entries,
+    required this.granularity,
+    required this.showDots,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final spots = entries
+    final points = _aggregateEntries(entries, granularity);
+    final spots = points
         .asMap()
         .entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.value))
         .toList();
-    final dates = entries.map((e) => e.date).toList();
+    final dates = points.map((p) => p.date).toList();
+    final unit = points.isNotEmpty ? points.first.unit : '';
 
     return Padding(
       padding: const EdgeInsets.all(16),
       child: ProgressLineChart(
         series: [
-          ChartSeries(label: entries.first.unit, spots: spots, color: Colors.blue),
+          ChartSeries(label: unit, spots: spots, color: Colors.blue),
         ],
         dates: dates,
+        showDots: showDots,
       ),
     );
   }

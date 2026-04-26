@@ -6,9 +6,34 @@ import '../../models/exercise.dart';
 import '../../models/exercise_log.dart';
 import '../../models/set_child.dart';
 import '../../repositories/exercise_log_repository.dart';
+import '../../widgets/chart_filter_bar.dart';
 import '../../widgets/date_picker_field.dart';
 import '../../widgets/progress_line_chart.dart';
 import '../../widgets/set_row_widget.dart';
+
+// Aggregate exercise logs into (date, avgWeight, volume) points.
+// In raw mode returns one point per log; otherwise collapses by period.
+List<({DateTime date, double avgWeight, double volume})> _aggregateLogs(
+    List<ExerciseLog> logs, ChartGranularity granularity) {
+  if (granularity == ChartGranularity.raw) {
+    return logs
+        .map((l) => (date: l.date, avgWeight: l.avgWeight, volume: l.volume))
+        .toList();
+  }
+  final groups = <String, List<ExerciseLog>>{};
+  for (final log in logs) {
+    groups.putIfAbsent(periodKey(log.date, granularity), () => []).add(log);
+  }
+  final sortedKeys = groups.keys.toList()..sort();
+  return sortedKeys.map((key) {
+    final g = groups[key]!;
+    return (
+      date: g.first.date,
+      avgWeight: g.fold(0.0, (s, l) => s + l.avgWeight) / g.length,
+      volume: g.fold(0.0, (s, l) => s + l.volume),
+    );
+  }).toList();
+}
 
 class ExerciseProgressScreen extends StatefulWidget {
   final Exercise exercise;
@@ -28,10 +53,16 @@ class ExerciseProgressScreen extends StatefulWidget {
 class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
   List<ExerciseLog> _logs = [];
   bool _loading = true;
+  ChartFilter _filter = ChartFilter.all;
+  late DateTime _customFrom;
+  late DateTime _customTo;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _customTo = DateTime(now.year, now.month, now.day);
+    _customFrom = _customTo.subtract(const Duration(days: 29));
     _load();
   }
 
@@ -39,13 +70,27 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
     setState(() => _loading = true);
     final logs = await widget.logRepo.getByExerciseId(widget.exercise.id);
     setState(() {
-      _logs = logs.reversed.toList();
+      _logs = logs.reversed.toList(); // ASC: oldest first
       _loading = false;
     });
   }
 
+  List<ExerciseLog> get _filteredLogs {
+    final start = windowStart(_filter, _customFrom);
+    final end = windowEnd(_filter, _customTo);
+    final endNext = end.add(const Duration(days: 1));
+    return _logs.where((l) {
+      final d = DateTime(l.date.year, l.date.month, l.date.day);
+      return !d.isBefore(start) && d.isBefore(endNext);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredLogs = _filteredLogs;
+    final granularity = granularityFor(_filter, _customFrom, _customTo);
+    final dots = showDots(_filter, _customFrom, _customTo);
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -57,22 +102,41 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _logs.isEmpty
-                ? const Center(child: Text('No logs yet.'))
-                : TabBarView(
-                    children: [
-                      _GraphView(
-                        logs: _logs,
-                        logRepo: widget.logRepo,
-                        onChanged: () => _load(),
-                      ),
-                      _TableView(
-                        logs: _logs,
-                        logRepo: widget.logRepo,
-                        onChanged: () => _load(),
-                      ),
-                    ],
+            : Column(
+                children: [
+                  ChartFilterBar(
+                    selected: _filter,
+                    customFrom: _customFrom,
+                    customTo: _customTo,
+                    onFilterChanged: (f) => setState(() => _filter = f),
+                    onFromChanged: (d) => setState(() => _customFrom = d),
+                    onToChanged: (d) => setState(() => _customTo = d),
                   ),
+                  Expanded(
+                    child: _logs.isEmpty
+                        ? const Center(child: Text('No logs yet.'))
+                        : filteredLogs.isEmpty
+                            ? const Center(
+                                child: Text('No data in this period.'))
+                            : TabBarView(
+                                children: [
+                                  _GraphView(
+                                    logs: filteredLogs,
+                                    granularity: granularity,
+                                    showDots: dots,
+                                    logRepo: widget.logRepo,
+                                    onChanged: _load,
+                                  ),
+                                  _TableView(
+                                    logs: filteredLogs,
+                                    logRepo: widget.logRepo,
+                                    onChanged: _load,
+                                  ),
+                                ],
+                              ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -82,11 +146,15 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
 
 class _GraphView extends StatefulWidget {
   final List<ExerciseLog> logs;
+  final ChartGranularity granularity;
+  final bool showDots;
   final ExerciseLogRepository logRepo;
   final VoidCallback onChanged;
 
   const _GraphView({
     required this.logs,
+    required this.granularity,
+    required this.showDots,
     required this.logRepo,
     required this.onChanged,
   });
@@ -98,24 +166,34 @@ class _GraphView extends StatefulWidget {
 class _GraphViewState extends State<_GraphView> {
   ExerciseLog? _selectedLog;
 
+  @override
+  void didUpdateWidget(_GraphView old) {
+    super.didUpdateWidget(old);
+    if (old.granularity != widget.granularity) _selectedLog = null;
+  }
+
   void _onSpotTouched(int index) {
-    final log = index >= 0 && index < widget.logs.length ? widget.logs[index] : null;
-    setState(() => _selectedLog = (_selectedLog?.id == log?.id) ? null : log);
+    final log =
+        index >= 0 && index < widget.logs.length ? widget.logs[index] : null;
+    setState(() =>
+        _selectedLog = (_selectedLog?.id == log?.id) ? null : log);
   }
 
   @override
   Widget build(BuildContext context) {
-    final weightSpots = widget.logs
+    final points = _aggregateLogs(widget.logs, widget.granularity);
+    final weightSpots = points
         .asMap()
         .entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.avgWeight))
         .toList();
-    final volumeSpots = widget.logs
+    final volumeSpots = points
         .asMap()
         .entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.volume))
         .toList();
-    final dates = widget.logs.map((l) => l.date).toList();
+    final dates = points.map((p) => p.date).toList();
+    final isRaw = widget.granularity == ChartGranularity.raw;
 
     return SingleChildScrollView(
       child: Padding(
@@ -125,13 +203,20 @@ class _GraphViewState extends State<_GraphView> {
           children: [
             ProgressLineChart(
               series: [
-                ChartSeries(label: 'Avg Weight', spots: weightSpots, color: Colors.blue),
-                ChartSeries(label: 'Volume', spots: volumeSpots, color: Colors.orange),
+                ChartSeries(
+                    label: 'Avg Weight',
+                    spots: weightSpots,
+                    color: Colors.blue),
+                ChartSeries(
+                    label: 'Volume',
+                    spots: volumeSpots,
+                    color: Colors.orange),
               ],
               dates: dates,
-              onSpotTouched: _onSpotTouched,
+              showDots: widget.showDots,
+              onSpotTouched: isRaw ? _onSpotTouched : null,
             ),
-            if (_selectedLog != null) ...[
+            if (_selectedLog != null && isRaw) ...[
               const SizedBox(height: 16),
               _LogDetailPanel(
                 log: _selectedLog!,
@@ -259,7 +344,8 @@ class _TableView extends StatelessWidget {
     );
   }
 
-  Widget _buildTable(BuildContext context, List<DataColumn> columns, List<DataRow> rows) {
+  Widget _buildTable(
+      BuildContext context, List<DataColumn> columns, List<DataRow> rows) {
     return SingleChildScrollView(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -282,36 +368,53 @@ class _TableView extends StatelessWidget {
                 _buildTable(
                   context,
                   [
-                    const DataColumn(label: Text('Avg Weight', style: TextStyle(fontWeight: FontWeight.bold))),
-                    const DataColumn(label: Text('Unit', style: TextStyle(fontWeight: FontWeight.bold))),
-                    const DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                    const DataColumn(
+                        label: Text('Avg Weight',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    const DataColumn(
+                        label: Text('Unit',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    const DataColumn(
+                        label: Text('Date',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
                     const DataColumn(label: SizedBox.shrink()),
                   ],
-                  reversed.map((l) => DataRow(cells: [
-                    DataCell(Text(l.avgWeight.toStringAsFixed(2))),
-                    DataCell(Text(l.sets.isNotEmpty ? l.sets.first.unit : '-')),
-                    DataCell(Text(DateFormat('dd/MM/yy').format(l.date))),
-                    DataCell(IconButton(
-                      icon: const Icon(Icons.edit, size: 18),
-                      onPressed: () => _openEdit(context, l),
-                    )),
-                  ])).toList(),
+                  reversed
+                      .map((l) => DataRow(cells: [
+                            DataCell(Text(l.avgWeight.toStringAsFixed(2))),
+                            DataCell(Text(
+                                l.sets.isNotEmpty ? l.sets.first.unit : '-')),
+                            DataCell(
+                                Text(DateFormat('dd/MM/yy').format(l.date))),
+                            DataCell(IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: () => _openEdit(context, l),
+                            )),
+                          ]))
+                      .toList(),
                 ),
                 _buildTable(
                   context,
                   [
-                    const DataColumn(label: Text('Volume', style: TextStyle(fontWeight: FontWeight.bold))),
-                    const DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                    const DataColumn(
+                        label: Text('Volume',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    const DataColumn(
+                        label: Text('Date',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
                     const DataColumn(label: SizedBox.shrink()),
                   ],
-                  reversed.map((l) => DataRow(cells: [
-                    DataCell(Text(l.volume.toStringAsFixed(2))),
-                    DataCell(Text(DateFormat('dd/MM/yy').format(l.date))),
-                    DataCell(IconButton(
-                      icon: const Icon(Icons.edit, size: 18),
-                      onPressed: () => _openEdit(context, l),
-                    )),
-                  ])).toList(),
+                  reversed
+                      .map((l) => DataRow(cells: [
+                            DataCell(Text(l.volume.toStringAsFixed(2))),
+                            DataCell(
+                                Text(DateFormat('dd/MM/yy').format(l.date))),
+                            DataCell(IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: () => _openEdit(context, l),
+                            )),
+                          ]))
+                      .toList(),
                 ),
               ],
             ),
@@ -353,7 +456,8 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
     super.initState();
     _date = widget.log.date;
     _sets = widget.log.sets
-        .map((s) => SetChild(id: s.id, reps: s.reps, weight: s.weight, unit: s.unit))
+        .map((s) =>
+            SetChild(id: s.id, reps: s.reps, weight: s.weight, unit: s.unit))
         .toList();
     _notesCtrl = TextEditingController(text: widget.log.notes ?? '');
     _notesCtrl.addListener(() => setState(() => _dirty = true));
@@ -380,7 +484,11 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Successfully saved'),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'))
+          ],
         ),
       );
       if (!mounted) return;
@@ -392,7 +500,11 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Save failed'),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'))
+          ],
         ),
       );
     }
@@ -404,8 +516,12 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
       builder: (ctx) => AlertDialog(
         title: const Text('Are you sure?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('No')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Yes')),
         ],
       ),
     );
@@ -436,7 +552,8 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Edit Log', style: Theme.of(context).textTheme.titleLarge),
+                Text('Edit Log',
+                    style: Theme.of(context).textTheme.titleLarge),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
                   tooltip: 'Delete',
@@ -447,19 +564,24 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
             const SizedBox(height: 12),
             DatePickerField(
               date: _date,
-              onChanged: (d) => setState(() { _date = d; _dirty = true; }),
+              onChanged: (d) => setState(() {
+                _date = d;
+                _dirty = true;
+              }),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+              decoration:
+                  const InputDecoration(labelText: 'Notes (optional)'),
               maxLines: 2,
             ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Sets', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Sets',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 TextButton.icon(
                   icon: const Icon(Icons.add),
                   label: const Text('Add'),
@@ -480,8 +602,16 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
               return SetRowWidget(
                 key: ValueKey(e.value.id),
                 set: e.value,
-                onChanged: (updated) => setState(() { _sets[idx] = updated; _dirty = true; }),
-                onDelete: () => setState(() { _sets.removeAt(idx); _dirty = true; }),
+                onChanged: (updated) =>
+                    setState(() {
+                      _sets[idx] = updated;
+                      _dirty = true;
+                    }),
+                onDelete: () =>
+                    setState(() {
+                      _sets.removeAt(idx);
+                      _dirty = true;
+                    }),
               );
             }),
             const SizedBox(height: 16),
