@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../app_repositories.dart';
 import '../../core/app_logger.dart';
 import '../../db/database_helper.dart';
+import '../../models/workout_plan.dart';
+import '../../repositories/exercise_log_repository.dart';
+import '../../repositories/exercise_repository.dart';
 import '../../services/share_service.dart';
 import '../../widgets/date_picker_field.dart';
 
@@ -16,6 +19,7 @@ class DataScreen extends StatefulWidget {
 
 class _DataScreenState extends State<DataScreen> {
   bool _importing = false;
+  bool _exportingPlan = false;
 
   Future<void> _clearAll() async {
     final confirmed = await showDialog<bool>(
@@ -58,14 +62,61 @@ class _DataScreenState extends State<DataScreen> {
   }
 
   Future<void> _showLogExportSheet() async {
+    final repos = AppRepositories.of(context);
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => _LogExportSheet(
-        logRepo: AppRepositories.of(context).exerciseLogRepo,
-        exerciseRepo: AppRepositories.of(context).exerciseRepo,
+        logRepo: repos.exerciseLogRepo,
+        exerciseRepo: repos.exerciseRepo,
       ),
     );
+  }
+
+  Future<void> _exportPlan() async {
+    final repos = AppRepositories.of(context);
+    final plans = await repos.planRepo.getAll();
+
+    if (!mounted) return;
+
+    if (plans.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No workout plans to export.')),
+      );
+      return;
+    }
+
+    WorkoutPlan? selected;
+    if (plans.length == 1) {
+      selected = plans.first;
+    } else {
+      selected = await showDialog<WorkoutPlan>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Select plan to export'),
+          children: plans
+              .map((p) => SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, p),
+                    child: Text(p.name),
+                  ))
+              .toList(),
+        ),
+      );
+    }
+
+    if (selected == null || !mounted) return;
+
+    setState(() => _exportingPlan = true);
+    try {
+      await ShareService.exportWorkoutPlan(
+        selected,
+        repos.workoutRepo,
+        repos.exerciseRepo,
+        context,
+      );
+    } finally {
+      if (mounted) setState(() => _exportingPlan = false);
+    }
   }
 
   Future<void> _importPlan() async {
@@ -94,6 +145,14 @@ class _DataScreenState extends State<DataScreen> {
         color: Theme.of(context).colorScheme.primary,
       );
 
+  Widget _loadingIcon(Widget icon, bool loading) => loading
+      ? const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )
+      : icon;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,19 +164,19 @@ class _DataScreenState extends State<DataScreen> {
             child: Text('Share', style: _sectionLabelStyle(context)),
           ),
           ListTile(
-            leading: const Icon(Icons.upload_file),
+            leading: _loadingIcon(const Icon(Icons.upload_file), _exportingPlan),
+            title: const Text('Export workout plan'),
+            subtitle: const Text('Share a plan as a file your trainer can send you'),
+            onTap: _exportingPlan ? null : _exportPlan,
+          ),
+          ListTile(
+            leading: const Icon(Icons.bar_chart),
             title: const Text('Export logs'),
             subtitle: const Text('Share your exercise history as JSON and text'),
             onTap: _showLogExportSheet,
           ),
           ListTile(
-            leading: _importing
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.download),
+            leading: _loadingIcon(const Icon(Icons.download), _importing),
             title: const Text('Import workout plan'),
             subtitle: const Text('Load a plan shared by your trainer'),
             onTap: _importing ? null : _importPlan,
@@ -139,15 +198,18 @@ class _DataScreenState extends State<DataScreen> {
   }
 }
 
-// ─── Period picker sheet ───────────────────────────────────────────────────
+// ─── Log export period picker sheet ───────────────────────────────────────
 
 enum _Period { week, month, custom }
 
 class _LogExportSheet extends StatefulWidget {
-  final dynamic logRepo;
-  final dynamic exerciseRepo;
+  final ExerciseLogRepository logRepo;
+  final ExerciseRepository exerciseRepo;
 
-  const _LogExportSheet({required this.logRepo, required this.exerciseRepo});
+  const _LogExportSheet({
+    required this.logRepo,
+    required this.exerciseRepo,
+  });
 
   @override
   State<_LogExportSheet> createState() => _LogExportSheetState();
@@ -203,13 +265,11 @@ class _LogExportSheetState extends State<_LogExportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // viewPaddingOf gives the system nav bar height (unlike viewInsetsOf which
+    // only covers the keyboard).
+    final navBarHeight = MediaQuery.viewPaddingOf(context).bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        16 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + navBarHeight),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -255,3 +315,4 @@ class _LogExportSheetState extends State<_LogExportSheet> {
     );
   }
 }
+
