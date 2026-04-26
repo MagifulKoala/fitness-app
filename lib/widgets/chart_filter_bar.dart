@@ -28,8 +28,8 @@ DateTime windowEnd(ChartFilter filter, DateTime customTo) {
 bool showDots(ChartFilter filter, DateTime from, DateTime to) {
   return switch (filter) {
     ChartFilter.day || ChartFilter.week || ChartFilter.month => true,
-    ChartFilter.year || ChartFilter.all => false,
-    ChartFilter.custom => to.difference(from).inDays <= 60,
+    ChartFilter.year => false,
+    ChartFilter.all || ChartFilter.custom => to.difference(from).inDays <= 60,
   };
 }
 
@@ -38,12 +38,13 @@ ChartGranularity granularityFor(ChartFilter filter, DateTime from, DateTime to) 
     ChartFilter.day => ChartGranularity.raw,
     ChartFilter.week || ChartFilter.month => ChartGranularity.day,
     ChartFilter.year => ChartGranularity.week,
-    ChartFilter.all => ChartGranularity.month,
-    ChartFilter.custom => _customGranularity(from, to),
+    ChartFilter.all => ChartGranularity.raw, // overridden per-screen with actual data range
+    ChartFilter.custom => adaptiveGranularity(from, to),
   };
 }
 
-ChartGranularity _customGranularity(DateTime from, DateTime to) {
+// Public so screens can compute granularity from actual data span for ChartFilter.all.
+ChartGranularity adaptiveGranularity(DateTime from, DateTime to) {
   final days = to.difference(from).inDays;
   if (days <= 7) return ChartGranularity.raw;
   if (days <= 60) return ChartGranularity.day;

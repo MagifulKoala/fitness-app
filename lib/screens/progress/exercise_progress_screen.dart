@@ -88,8 +88,15 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredLogs = _filteredLogs;
-    final granularity = granularityFor(_filter, _customFrom, _customTo);
-    final dots = showDots(_filter, _customFrom, _customTo);
+    final ChartGranularity granularity;
+    final bool dots;
+    if (_filter == ChartFilter.all && filteredLogs.length >= 2) {
+      granularity = adaptiveGranularity(filteredLogs.first.date, filteredLogs.last.date);
+      dots = filteredLogs.last.date.difference(filteredLogs.first.date).inDays <= 60;
+    } else {
+      granularity = granularityFor(_filter, _customFrom, _customTo);
+      dots = showDots(_filter, _customFrom, _customTo);
+    }
 
     return DefaultTabController(
       length: 2,

@@ -80,8 +80,15 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredEntries = _filteredEntries;
-    final granularity = granularityFor(_filter, _customFrom, _customTo);
-    final dots = showDots(_filter, _customFrom, _customTo);
+    final ChartGranularity granularity;
+    final bool dots;
+    if (_filter == ChartFilter.all && filteredEntries.length >= 2) {
+      granularity = adaptiveGranularity(filteredEntries.first.date, filteredEntries.last.date);
+      dots = filteredEntries.last.date.difference(filteredEntries.first.date).inDays <= 60;
+    } else {
+      granularity = granularityFor(_filter, _customFrom, _customTo);
+      dots = showDots(_filter, _customFrom, _customTo);
+    }
 
     return DefaultTabController(
       length: 2,
