@@ -40,6 +40,28 @@ class ExerciseLogRepository {
     return result;
   }
 
+  Future<List<ExerciseLog>> getByDateRange(DateTime from, DateTime to) async {
+    final db = await _db.database;
+    final toNext = to.add(const Duration(days: 1));
+    final rows = await db.query(
+      'exercise_logs',
+      where: 'date >= ? AND date < ?',
+      whereArgs: [from.toIso8601String(), toNext.toIso8601String()],
+      orderBy: 'date ASC',
+    );
+    final result = <ExerciseLog>[];
+    for (final row in rows) {
+      final logId = row['id'] as String;
+      final setRows = await db.query(
+        'exercise_log_sets',
+        where: 'log_id = ?',
+        whereArgs: [logId],
+      );
+      result.add(ExerciseLog.fromMap(row, setRows.map(SetChild.fromMap).toList()));
+    }
+    return result;
+  }
+
   Future<void> update(ExerciseLog exerciseLog) async {
     log.d('[ExerciseLogRepo] update: id=${exerciseLog.id}');
     final db = await _db.database;

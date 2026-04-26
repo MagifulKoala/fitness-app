@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import '../../app_repositories.dart';
 import '../../models/workout.dart';
 import '../../models/workout_plan.dart';
 import '../../models/workout_plan_entry.dart';
 import '../../repositories/workout_plan_repository.dart';
 import '../../repositories/workout_repository.dart';
+import '../../services/share_service.dart';
 
 class WorkoutPlanDetailScreen extends StatefulWidget {
   final WorkoutPlan? plan;
@@ -115,6 +117,16 @@ class _WorkoutPlanDetailScreenState extends State<WorkoutPlanDetailScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Plan' : 'New Plan'),
         actions: [
+          if (_isEdit)
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: () => ShareService.exportWorkoutPlan(
+                widget.plan!,
+                widget.workoutRepo,
+                AppRepositories.of(context).exerciseRepo,
+                context,
+              ),
+            ),
           if (_isEdit)
             IconButton(
               icon: const Icon(Icons.delete),
