@@ -52,7 +52,9 @@ lib/
     body/                   ← MeasurementListScreen, MeasurementDetailScreen
     progress/               ← ProgressScreen, ExerciseProgressScreen, MeasurementProgressScreen
     settings/               ← SettingsScreen, DataScreen
-  widgets/                  ← SetRowWidget, DatePickerField, ProgressLineChart, ProgressTable
+  services/
+    share_service.dart      ← static helpers for export/import (workout plans, exercise logs)
+  widgets/                  ← SetRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar
 ```
 
 ## Data Model Summary
@@ -83,6 +85,8 @@ No external state management library. Repositories are passed via `AppRepositori
 | `intl` | Date formatting (dd/MM/yy display, ISO 8601 storage) |
 | `equatable` | Value equality for model classes |
 | `logger` | Structured console logging (debug/info/warn/error) |
+| `share_plus` | Android share sheet for exporting files |
+| `file_picker` | File picker for importing JSON files |
 
 ## Logging
 
@@ -154,13 +158,26 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 - `MeasurementDetailScreen` shows entry history table and a line chart; supports adding, editing, and deleting entries.
 
 ### Progress tab
-- **Exercises sub-tab**: searchable list of all exercises (filters by name and alias) → `ExerciseProgressScreen` (line chart of volume over time + scrollable data table with edit/delete per row).
-- **Body sub-tab**: searchable list of all measurements (filters by name) → `MeasurementProgressScreen` (line chart + scrollable data table with edit/delete per row).
+- **Exercises sub-tab**: searchable list of all exercises (filters by name and alias) → `ExerciseProgressScreen`.
+  - Line chart with Avg Weight and Volume series; tapping a dot opens a log detail panel (edit/delete).
+  - Time filter bar: Day / Week / Month / Year / All / Custom. Granularity auto-adjusts (raw → daily → weekly → monthly). `All` filter uses adaptive granularity based on the actual data span so all logs are visible.
+  - Data table (Weight and Volume sub-tabs) shows raw individual log entries within the selected window, with edit/delete per row.
+- **Body sub-tab**: searchable list of all measurements (filters by name) → `MeasurementProgressScreen`.
+  - Same filter bar and adaptive granularity as the exercise screen.
+  - Single-series line chart; table shows raw entries within the selected window with edit/delete.
 - Tab state is refreshed whenever the Progress tab is selected (via `GlobalKey<ProgressScreenState>`).
 
 ### Settings tab
 - **Display** section: Dark mode toggle (persisted via `SettingsRepository`).
-- **Data** section: "Manage data" → `DataScreen` with "Clear all data" (confirmation dialog; wipes all workout/exercise/measurement data and re-seeds the default Weight measurement; preserves app preferences).
+- **Data** section:
+  - **Share**: Export workout plan (JSON), Export exercise logs (JSON + human-readable .txt, with period picker), Import workout plan (from JSON file).
+  - **Manage data**: "Clear all data" — confirmation dialog, wipes all workout/exercise/measurement data, re-seeds default Weight measurement, preserves app preferences.
+
+### Share / Import (trainer ↔ client workflow)
+File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
+- **Export workout plan**: from Settings → Data → Share, or from the plan's edit screen AppBar. Produces a self-contained JSON with exercises and set templates. Recipient imports it via "Import workout plan".
+- **Export exercise logs**: Settings → Data → Share → Export logs. Period picker (Last 7 days / Last 30 days / Custom). Shares both `.json` (machine-readable) and `.txt` (human-readable grouped by date).
+- **Import workout plan**: picks a `.json` file, deduplicates exercises by name (case-insensitive), always creates new Workout and WorkoutPlan objects with fresh UUIDs.
 
 ## Recent Changes
 
@@ -174,6 +191,9 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 - **Exercise log fix**: Log sets get fresh UUIDs each time to prevent `UNIQUE constraint` violations on repeat logs.
 - **Edit/delete log entries**: Both `ExerciseProgressScreen` and `MeasurementProgressScreen` table views have an edit icon per row opening an edit sheet with dirty-state Save button and Delete with confirmation.
 - **Logging**: `package:logger` added. All repositories log mutations at `d` level. Errors at `e` level with stack traces. `clearAll` at `w` level.
+- **File-based sharing**: `share_plus` + `file_picker` packages added. `ShareService` handles export/import of workout plans and exercise logs. Export entry points: plan edit AppBar and Settings → Data → Share. System nav bar padding fixed on all bottom sheets using `MediaQuery.viewPaddingOf(context).bottom`.
+- **Exercise log repository**: `getByDateRange()` added. Both `getByExerciseId` and `getByDateRange` use a batch `WHERE log_id IN (...)` query via `rawQuery` to avoid N+1 set fetches.
+- **Progress chart time filter**: `ChartFilterBar` widget (`lib/widgets/chart_filter_bar.dart`) with Day/Week/Month/Year/All/Custom chips added to both progress screens. Granularity auto-adjusts per filter; `All` uses adaptive granularity based on actual data span. Dots hidden for dense views (year/all with large span) but always shown when only 1 aggregated point exists. Table view shows raw individual entries within the selected window.
 
 ### CLAUDE.md
 Make sure to update this file with any major changes.
