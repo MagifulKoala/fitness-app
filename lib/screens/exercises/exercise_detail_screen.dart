@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../app_repositories.dart';
 import '../../core/app_logger.dart';
@@ -33,6 +34,18 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   void initState() {
     super.initState();
     _exercise = widget.exercise;
+  }
+
+  Future<void> _launchUrl(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open: $url')),
+        );
+      }
+    }
   }
 
   Future<void> _refresh() async {
@@ -213,6 +226,27 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
           if (_exercise.notes != null && _exercise.notes!.isNotEmpty) ...[
             Text('Notes', style: Theme.of(context).textTheme.labelLarge),
             Text(_exercise.notes!),
+            const SizedBox(height: 12),
+          ],
+          if (_exercise.links.isNotEmpty) ...[
+            Text('Links', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 4),
+            ..._exercise.links.map((l) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.link, size: 18),
+                  title: Text(
+                    l.label.isNotEmpty ? l.label : l.url,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: l.label.isNotEmpty
+                      ? Text(l.url,
+                          maxLines: 1, overflow: TextOverflow.ellipsis)
+                      : null,
+                  trailing: const Icon(Icons.open_in_new, size: 16),
+                  onTap: () => _launchUrl(context, l.url),
+                )),
             const SizedBox(height: 12),
           ],
           Text('Current Template',

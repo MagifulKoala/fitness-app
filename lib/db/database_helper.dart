@@ -25,7 +25,7 @@ class DatabaseHelper {
     final path = join(dir.path, 'workout_app.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -142,6 +142,16 @@ class DatabaseHelper {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE exercise_links (
+        id          TEXT    PRIMARY KEY,
+        exercise_id TEXT    NOT NULL,
+        url         TEXT    NOT NULL,
+        label       TEXT    NOT NULL DEFAULT '',
+        sort_order  INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
     // Seed default "Weight" measurement
     final weightId = const Uuid().v4();
     await db.insert('measurements', {'id': weightId, 'name': 'Weight'});
@@ -164,6 +174,7 @@ class DatabaseHelper {
         'workouts',
         'measurement_entries',
         'measurements',
+        'exercise_links',
       ]) {
         await txn.delete(table);
       }
@@ -182,6 +193,18 @@ class DatabaseHelper {
         CREATE TABLE IF NOT EXISTS app_settings (
           key   TEXT PRIMARY KEY,
           value TEXT NOT NULL
+        )
+      ''');
+    }
+    if (oldVersion < 3) {
+      // v3: per-exercise links (tutorials, videos, etc.)
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS exercise_links (
+          id          TEXT    PRIMARY KEY,
+          exercise_id TEXT    NOT NULL,
+          url         TEXT    NOT NULL,
+          label       TEXT    NOT NULL DEFAULT '',
+          sort_order  INTEGER NOT NULL DEFAULT 0
         )
       ''');
     }

@@ -1,7 +1,9 @@
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../core/app_logger.dart';
 import '../db/database_helper.dart';
 import '../models/exercise.dart';
+import '../models/exercise_link.dart';
 import '../models/set_child.dart';
 import '../models/set_template.dart';
 
@@ -59,6 +61,11 @@ class ExerciseRepository {
       await db.insert('set_children', set.toMap(setTemplateId: templateId));
     }
 
+    for (var i = 0; i < exercise.links.length; i++) {
+      await db.insert('exercise_links',
+          exercise.links[i].toMap(exerciseId: exercise.id, sortOrder: i));
+    }
+
     return exercise;
   }
 
@@ -89,11 +96,19 @@ class ExerciseRepository {
         await db.insert('set_children', set.toMap(setTemplateId: templateId));
       }
     }
+
+    await db.delete('exercise_links',
+        where: 'exercise_id = ?', whereArgs: [exercise.id]);
+    for (var i = 0; i < exercise.links.length; i++) {
+      await db.insert('exercise_links',
+          exercise.links[i].toMap(exerciseId: exercise.id, sortOrder: i));
+    }
   }
 
   Future<void> delete(String id) async {
     log.d('[ExerciseRepo] delete: $id');
     final db = await _db.database;
+    await db.delete('exercise_links', where: 'exercise_id = ?', whereArgs: [id]);
     final templates = await db.query(
       'set_templates',
       where: 'exercise_id = ?',
@@ -110,7 +125,7 @@ class ExerciseRepository {
     await db.delete('exercises', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<Exercise> _hydrate(dynamic db, Map<String, dynamic> row) async {
+  Future<Exercise> _hydrate(Database db, Map<String, dynamic> row) async {
     final exerciseId = row['id'] as String;
     final templates = await db.query(
       'set_templates',
@@ -132,6 +147,14 @@ class ExerciseRepository {
       setTemplate = SetTemplate.fromMap(templates.first, sets);
     }
 
-    return Exercise.fromMap(row, setTemplate);
+    final linkRows = await db.query(
+      'exercise_links',
+      where: 'exercise_id = ?',
+      whereArgs: [exerciseId],
+      orderBy: 'sort_order ASC',
+    );
+    final links = linkRows.map(ExerciseLink.fromMap).toList();
+
+    return Exercise.fromMap(row, setTemplate, links);
   }
 }

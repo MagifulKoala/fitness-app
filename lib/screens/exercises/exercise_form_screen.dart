@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/exercise.dart';
+import '../../models/exercise_link.dart';
 import '../../models/set_child.dart';
 import '../../models/set_template.dart';
 import '../../repositories/exercise_repository.dart';
+import '../../widgets/link_row_widget.dart';
 import '../../widgets/set_row_widget.dart';
 
 class ExerciseFormScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
   late TextEditingController _aliasesCtrl;
   late TextEditingController _notesCtrl;
   late List<SetChild> _sets;
+  late List<ExerciseLink> _links;
   bool _saving = false;
 
   bool get _isEdit => widget.exercise != null;
@@ -49,6 +52,7 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
               unit: 'kg',
             )
           ];
+    _links = ex != null ? List.of(ex.links) : [];
   }
 
   @override
@@ -70,6 +74,19 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
           .where((s) => s.isNotEmpty)
           .toList();
 
+      final links = _links
+          .map((l) {
+            var url = l.url.trim();
+            if (url.isNotEmpty &&
+                !url.startsWith('http://') &&
+                !url.startsWith('https://')) {
+              url = 'https://$url';
+            }
+            return ExerciseLink(id: l.id, label: l.label.trim(), url: url);
+          })
+          .where((l) => l.url.isNotEmpty)
+          .toList();
+
       final existing = widget.exercise;
       if (_isEdit && existing != null) {
         final updated = existing.copyWith(
@@ -79,6 +96,7 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
               ? null
               : _notesCtrl.text.trim(),
           setTemplate: existing.setTemplate.copyWith(sets: _sets),
+          links: links,
         );
         await widget.exerciseRepo.update(updated);
       } else {
@@ -91,6 +109,7 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
               ? null
               : _notesCtrl.text.trim(),
           setTemplate: SetTemplate(id: templateId, sets: _sets),
+          links: links,
         );
         await widget.exerciseRepo.insert(exercise);
       }
@@ -169,6 +188,45 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
               decoration: const InputDecoration(labelText: 'Notes'),
               maxLines: 3,
             ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Links',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                TextButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add link'),
+                  onPressed: () {
+                    setState(() {
+                      _links.add(ExerciseLink(
+                        id: _uuid.v4(),
+                        label: '',
+                        url: '',
+                      ));
+                    });
+                  },
+                ),
+              ],
+            ),
+            ..._links.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final link = entry.value;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: LinkRowWidget(
+                  key: ValueKey(link.id),
+                  link: link,
+                  onChanged: (updated) {
+                    setState(() => _links[idx] = updated);
+                  },
+                  onDelete: () {
+                    setState(() => _links.removeAt(idx));
+                  },
+                ),
+              );
+            }),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

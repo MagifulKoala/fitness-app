@@ -397,6 +397,7 @@ class ShareService {
               aliases: (exJson['aliases'] as List? ?? []).cast<String>(),
               notes: exJson['notes'] as String?,
               setTemplate: SetTemplate(id: _uuid.v4(), sets: sets),
+              links: const [],
             );
             await exerciseRepo.insert(newExercise);
             exerciseIdByName[nameLower] = newExercise.id;
