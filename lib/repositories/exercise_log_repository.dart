@@ -30,6 +30,12 @@ class ExerciseLogRepository {
     return _hydrateLogs(db, rows);
   }
 
+  Future<List<ExerciseLog>> getAll() async {
+    final db = await _db.database;
+    final rows = await db.query('exercise_logs', orderBy: 'date ASC');
+    return _hydrateLogs(db, rows);
+  }
+
   Future<List<ExerciseLog>> getByDateRange(DateTime from, DateTime to) async {
     final db = await _db.database;
     final toNext = to.add(const Duration(days: 1));

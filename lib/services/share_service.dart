@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -203,6 +204,125 @@ class ShareService {
           buf.writeln('    ${s.reps} × ${s.weight} ${s.unit}');
         }
       }
+      buf.writeln();
+    }
+
+    return buf.toString();
+  }
+
+  // ─── Save full backup ─────────────────────────────────────────────────────
+
+  static Future<void> saveFullBackup(
+    ExerciseRepository exerciseRepo,
+    ExerciseLogRepository logRepo,
+    BuildContext context,
+  ) async {
+    try {
+      final exercises = await exerciseRepo.getAll();
+      final allLogs = await logRepo.getAll();
+
+      final logsByExercise = <String, List<ExerciseLog>>{};
+      for (final l in allLogs) {
+        logsByExercise.putIfAbsent(l.exerciseId, () => []).add(l);
+      }
+
+      final text = _buildBackupText(exercises, logsByExercise);
+      final now = DateTime.now();
+      final fileName = 'workout_backup_${_isoDate(now)}.txt';
+
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save backup',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['txt'],
+        bytes: Uint8List.fromList(utf8.encode(text)),
+      );
+
+      log.d('[ShareService] saveFullBackup: $fileName → $result');
+      if (result != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup saved.')),
+        );
+      }
+    } catch (e, st) {
+      log.e('[ShareService] saveFullBackup failed', error: e, stackTrace: st);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save backup.')),
+        );
+      }
+    }
+  }
+
+  static String _buildBackupText(
+    List<Exercise> exercises,
+    Map<String, List<ExerciseLog>> logsByExercise,
+  ) {
+    final buf = StringBuffer();
+    final sep = '─' * 45;
+    final dateFmtLong = DateFormat('dd MMM yyyy HH:mm');
+    final dateFmtShort = DateFormat('dd/MM/yyyy');
+
+    buf.writeln('WORKOUT APP BACKUP');
+    buf.writeln('Generated: ${dateFmtLong.format(DateTime.now())}');
+    buf.writeln(sep);
+    buf.writeln();
+
+    // ── Section 1: Exercises ──────────────────────────────────────────────
+    buf.writeln('EXERCISES (${exercises.length})');
+    buf.writeln(sep);
+    buf.writeln();
+
+    for (var i = 0; i < exercises.length; i++) {
+      final ex = exercises[i];
+      buf.writeln('${i + 1}. ${ex.name}');
+      if (ex.aliases.isNotEmpty) {
+        buf.writeln('   Aliases: ${ex.aliases.join(', ')}');
+      }
+      if (ex.notes != null && ex.notes!.isNotEmpty) {
+        buf.writeln('   Notes: ${ex.notes}');
+      }
+      final sets = ex.setTemplate.sets;
+      if (sets.isNotEmpty) {
+        buf.writeln('   Set template (${sets.length} set${sets.length == 1 ? '' : 's'}):');
+        for (var j = 0; j < sets.length; j++) {
+          final s = sets[j];
+          buf.writeln('     ${j + 1}. ${s.reps} reps × ${s.weight} ${s.unit}');
+        }
+      }
+      buf.writeln();
+    }
+
+    // ── Section 2: Logs per exercise ──────────────────────────────────────
+    buf.writeln(sep);
+    buf.writeln('EXERCISE LOGS');
+    buf.writeln(sep);
+    buf.writeln();
+
+    var hasAnyLogs = false;
+    for (final ex in exercises) {
+      final logs = logsByExercise[ex.id];
+      if (logs == null || logs.isEmpty) continue;
+      hasAnyLogs = true;
+
+      buf.writeln('${ex.name} (${logs.length} session${logs.length == 1 ? '' : 's'})');
+      buf.writeln();
+
+      for (final entry in logs.reversed) {
+        buf.writeln('  ${dateFmtShort.format(entry.date)}');
+        for (var k = 0; k < entry.sets.length; k++) {
+          final s = entry.sets[k];
+          buf.writeln('    ${k + 1}. ${s.reps} reps × ${s.weight} ${s.unit}');
+        }
+        if (entry.notes != null && entry.notes!.isNotEmpty) {
+          buf.writeln('    Notes: ${entry.notes}');
+        }
+        buf.writeln();
+      }
+    }
+
+    if (!hasAnyLogs) {
+      buf.writeln('No logs recorded yet.');
       buf.writeln();
     }
 

@@ -20,6 +20,21 @@ class DataScreen extends StatefulWidget {
 class _DataScreenState extends State<DataScreen> {
   bool _importing = false;
   bool _exportingPlan = false;
+  bool _savingBackup = false;
+
+  Future<void> _saveBackup() async {
+    setState(() => _savingBackup = true);
+    try {
+      final repos = AppRepositories.of(context);
+      await ShareService.saveFullBackup(
+        repos.exerciseRepo,
+        repos.exerciseLogRepo,
+        context,
+      );
+    } finally {
+      if (mounted) setState(() => _savingBackup = false);
+    }
+  }
 
   Future<void> _clearAll() async {
     final confirmed = await showDialog<bool>(
@@ -180,6 +195,12 @@ class _DataScreenState extends State<DataScreen> {
             title: const Text('Import workout plan'),
             subtitle: const Text('Load a plan shared by your trainer'),
             onTap: _importing ? null : _importPlan,
+          ),
+          ListTile(
+            leading: _loadingIcon(const Icon(Icons.save_alt), _savingBackup),
+            title: const Text('Save backup'),
+            subtitle: const Text('Save all exercises and logs as a text file'),
+            onTap: _savingBackup ? null : _saveBackup,
           ),
           const Divider(),
           Padding(
