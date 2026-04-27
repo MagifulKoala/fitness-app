@@ -54,12 +54,12 @@ lib/
     settings/               ← SettingsScreen, DataScreen
   services/
     share_service.dart      ← static helpers for export/import (workout plans, exercise logs)
-  widgets/                  ← SetRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar
+  widgets/                  ← SetRowWidget, LinkRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar
 ```
 
 ## Data Model Summary
 
-- **Exercise** — name, aliases (comma-separated in DB), notes, owns a **SetTemplate** (list of **SetChild**: reps, weight, unit)
+- **Exercise** — name, aliases (comma-separated in DB), notes, owns a **SetTemplate** (list of **SetChild**: reps, weight, unit), and a list of **ExerciseLink** (label, url) stored in a separate table
 - **ExerciseLog** — snapshot of set data at log time (independent of future template edits)
 - **Workout** — name, notes, ordered list of exercise IDs
 - **WorkoutPlan** — name, list of **WorkoutPlanEntry** (workoutId + dayOfWeek 1–7)
@@ -86,7 +86,8 @@ No external state management library. Repositories are passed via `AppRepositori
 | `equatable` | Value equality for model classes |
 | `logger` | Structured console logging (debug/info/warn/error) |
 | `share_plus` | Android share sheet for exporting files |
-| `file_picker` | File picker for importing JSON files |
+| `file_picker` | File picker for importing JSON files and saving backups |
+| `url_launcher` | Open URLs in the system browser (exercise links) |
 
 ## Logging
 
@@ -109,7 +110,7 @@ adb logcat flutter:E *:S            # errors only
 ## Database Notes
 
 - DB file: `workout_app.db` in the app documents directory
-- **Schema version: 2** — bump version and add a new `if (oldVersion < N)` block in `_onUpgrade` in `lib/db/database_helper.dart` for every schema change. Never edit earlier migration blocks.
+- **Schema version: 3** — bump version and add a new `if (oldVersion < N)` block in `_onUpgrade` in `lib/db/database_helper.dart` for every schema change. Never edit earlier migration blocks.
 - On first launch, a default **"Weight"** measurement is seeded automatically
 - Dates stored as ISO 8601 strings; displayed as dd/MM/yy via `intl`
 - `app_settings` table is intentionally excluded from `clearAll()` so user preferences (e.g. dark mode) survive a data wipe
@@ -119,6 +120,7 @@ adb logcat flutter:E *:S            # errors only
 |---|---|
 | 1 | Initial schema (exercises, workouts, plans, sessions, measurements) |
 | 2 | Added `app_settings` key-value table for app preferences |
+| 3 | Added `exercise_links` table (id, exercise_id, url, label, sort_order) |
 
 ## Theme / Dark Mode
 
@@ -143,9 +145,10 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 ## Feature Overview
 
 ### Exercises tab
-- List of all exercises; tap to open `ExerciseDetailScreen` (shows set template + log history).
-- FAB opens `ExerciseFormScreen` (create/edit name, aliases, notes, set template).
+- List of all exercises; tap to open `ExerciseDetailScreen` (shows links, set template, log history).
+- FAB opens `ExerciseFormScreen` (create/edit name, aliases, notes, links, set template).
 - From `ExerciseDetailScreen`, the Log FAB opens a log sheet to record a session.
+- **Links**: each exercise stores an ordered list of `ExerciseLink` (label + URL). Displayed as tappable tiles in the detail screen (opens system browser via `url_launcher`). Edited in the form screen with the same add/remove pattern as sets. URLs without a scheme get `https://` prepended on save.
 
 ### Workouts tab
 - Two sub-tabs: **Workouts** (list → `WorkoutDetailScreen`) and **Plans** (list → `WorkoutPlanDetailScreen`).
@@ -171,6 +174,7 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 - **Display** section: Dark mode toggle (persisted via `SettingsRepository`).
 - **Data** section:
   - **Share**: Export workout plan (JSON), Export exercise logs (JSON + human-readable .txt, with period picker), Import workout plan (from JSON file).
+  - **Save backup**: dumps all exercises (aliases, notes, set template) and all logs per exercise to a human-readable `.txt` file at a user-chosen location via `FilePicker.saveFile` (Storage Access Framework — no extra permissions needed).
   - **Manage data**: "Clear all data" — confirmation dialog, wipes all workout/exercise/measurement data, re-seeds default Weight measurement, preserves app preferences.
 
 ### Share / Import (trainer ↔ client workflow)
@@ -180,6 +184,10 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 - **Import workout plan**: picks a `.json` file, deduplicates exercises by name (case-insensitive), always creates new Workout and WorkoutPlan objects with fresh UUIDs.
 
 ## Recent Changes
+
+- **Exercise links**: Each exercise now has an ordered list of links (label + URL). Stored in `exercise_links` table (schema v3). Tappable tiles in `ExerciseDetailScreen` open the system browser. Managed in `ExerciseFormScreen` with the same add/remove/edit pattern as sets. `url_launcher` added; Android `<queries>` block updated for http/https. `LinkRowWidget` added to `lib/widgets/`.
+- **Save backup**: Settings → Data → Save backup. Writes a plain-text file (exercises section + logs-per-exercise section) to a user-chosen location via `FilePicker.saveFile`. Uses `ExerciseLogRepository.getAll()`.
+- **Progress chart fix**: `ProgressLineChart` was not updating when the filter changed because `_series` was only set in `initState`. Added `didUpdateWidget` to sync series on widget update.
 
 - **Dark mode**: Settings → Display → Dark mode toggle. Persisted in `app_settings` SQLite table (schema v2). Survives data wipes. Theme owned by `WorkoutApp` state and loaded async on startup.
 - **Progress search bars**: Both the Exercises and Body sub-tabs on the Progress screen now have a search bar that filters the list in real time (exercises match on name and aliases; measurements match on name).
