@@ -43,6 +43,14 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
     _series = widget.series;
   }
 
+  @override
+  void didUpdateWidget(ProgressLineChart old) {
+    super.didUpdateWidget(old);
+    if (old.series != widget.series) {
+      _series = widget.series;
+    }
+  }
+
   static double _xInterval(int count) {
     if (count <= 7) return 1;
     if (count <= 14) return 2;
