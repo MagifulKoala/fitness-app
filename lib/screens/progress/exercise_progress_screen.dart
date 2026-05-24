@@ -21,8 +21,8 @@ List<({DateTime date, double avgWeight, double volume})> _aggregateLogs(
         .toList();
   }
   final groups = <String, List<ExerciseLog>>{};
-  for (final log in logs) {
-    groups.putIfAbsent(periodKey(log.date, granularity), () => []).add(log);
+  for (final entry in logs) {
+    groups.putIfAbsent(periodKey(entry.date, granularity), () => []).add(entry);
   }
   final sortedKeys = groups.keys.toList()..sort();
   return sortedKeys.map((key) {
@@ -200,9 +200,24 @@ class _GraphViewState extends State<_GraphView> {
         .map((e) => FlSpot(e.key.toDouble(), e.value.volume))
         .toList();
     final dates = points.map((p) => p.date).toList();
+    if (points.length < 2) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'Not enough data to draw a chart in this period.\n'
+            'Try "All" or "Custom" to see a longer range.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      );
+    }
+
     final isRaw = widget.granularity == ChartGranularity.raw;
-    // Always show dots for a single point — a line needs 2+ spots.
-    final showDots = widget.showDots || points.length <= 1;
+    final showDots = widget.showDots;
 
     return SingleChildScrollView(
       child: Padding(

@@ -160,8 +160,24 @@ class _GraphView extends StatelessWidget {
         .map((e) => FlSpot(e.key.toDouble(), e.value.value))
         .toList();
     final dates = points.map((p) => p.date).toList();
+    if (points.length < 2) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'Not enough data to draw a chart in this period.\n'
+            'Try "All" or "Custom" to see a longer range.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      );
+    }
+
     final unit = points.isNotEmpty ? points.first.unit : '';
-    final effectiveShowDots = showDots || points.length <= 1;
+    final effectiveShowDots = showDots;
 
     return Padding(
       padding: const EdgeInsets.all(16),
