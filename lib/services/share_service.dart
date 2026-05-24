@@ -17,6 +17,7 @@ import '../models/workout_plan.dart';
 import '../models/workout_plan_entry.dart';
 import '../repositories/exercise_log_repository.dart';
 import '../repositories/exercise_repository.dart';
+import '../repositories/settings_repository.dart';
 import '../repositories/workout_plan_repository.dart';
 import '../repositories/workout_repository.dart';
 
@@ -327,6 +328,36 @@ class ShareService {
     }
 
     return buf.toString();
+  }
+
+  // ─── Auto backup to folder ────────────────────────────────────────────────
+
+  /// Writes workout_backup.txt to [folderPath], overwriting any previous file.
+  /// Updates the last-backup timestamp in [settingsRepo] on success.
+  /// Returns true on success, false on any error (errors are logged, not thrown).
+  static Future<bool> autoBackupToFolder(
+    ExerciseRepository exerciseRepo,
+    ExerciseLogRepository logRepo,
+    SettingsRepository settingsRepo,
+    String folderPath,
+  ) async {
+    try {
+      final exercises = await exerciseRepo.getAll();
+      final allLogs = await logRepo.getAll();
+      final logsByExercise = <String, List<ExerciseLog>>{};
+      for (final l in allLogs) {
+        logsByExercise.putIfAbsent(l.exerciseId, () => []).add(l);
+      }
+      final text = _buildBackupText(exercises, logsByExercise);
+      final file = File('$folderPath/workout_backup.txt');
+      await file.writeAsString(text);
+      await settingsRepo.setBackupLastTimestamp(DateTime.now());
+      log.d('[ShareService] autoBackupToFolder → $folderPath/workout_backup.txt');
+      return true;
+    } catch (e, st) {
+      log.e('[ShareService] autoBackupToFolder failed', error: e, stackTrace: st);
+      return false;
+    }
   }
 
   // ─── Import workout plan ───────────────────────────────────────────────────

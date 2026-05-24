@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../repositories/settings_repository.dart';
 import 'data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
+  final SettingsRepository settingsRepo;
   final VoidCallback onDataCleared;
   final ThemeMode themeMode;
   final void Function(ThemeMode) onThemeModeChanged;
 
   const SettingsScreen({
     super.key,
+    required this.settingsRepo,
     required this.onDataCleared,
     required this.themeMode,
     required this.onThemeModeChanged,
@@ -56,7 +59,10 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => DataScreen(onDataCleared: onDataCleared),
+                builder: (_) => DataScreen(
+              settingsRepo: settingsRepo,
+              onDataCleared: onDataCleared,
+            ),
               ),
             ),
           ),

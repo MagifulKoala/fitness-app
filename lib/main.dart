@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -15,6 +16,7 @@ import 'screens/exercises/exercise_list_screen.dart';
 import 'screens/progress/progress_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/workouts/workout_list_screen.dart';
+import 'services/share_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +40,9 @@ void main() async {
   final measurementRepo = MeasurementRepository(db);
   final settingsRepo = SettingsRepository(db);
 
+  // Fire auto-backup concurrently with app startup — silent, no UI needed.
+  unawaited(_autoBackupIfConfigured(exerciseRepo, exerciseLogRepo, settingsRepo));
+
   runApp(
     AppRepositories(
       exerciseRepo: exerciseRepo,
@@ -49,6 +54,18 @@ void main() async {
       child: WorkoutApp(settingsRepo: settingsRepo),
     ),
   );
+}
+
+Future<void> _autoBackupIfConfigured(
+  ExerciseRepository exerciseRepo,
+  ExerciseLogRepository exerciseLogRepo,
+  SettingsRepository settingsRepo,
+) async {
+  final folderPath = await settingsRepo.getBackupFolderPath();
+  if (folderPath != null) {
+    await ShareService.autoBackupToFolder(
+        exerciseRepo, exerciseLogRepo, settingsRepo, folderPath);
+  }
 }
 
 class WorkoutApp extends StatefulWidget {
@@ -100,6 +117,7 @@ class _WorkoutAppState extends State<WorkoutApp> {
       ),
       themeMode: _themeMode,
       home: _MainShell(
+        settingsRepo: widget.settingsRepo,
         themeMode: _themeMode,
         onThemeModeChanged: _onThemeModeChanged,
       ),
@@ -108,10 +126,12 @@ class _WorkoutAppState extends State<WorkoutApp> {
 }
 
 class _MainShell extends StatefulWidget {
+  final SettingsRepository settingsRepo;
   final ThemeMode themeMode;
   final void Function(ThemeMode) onThemeModeChanged;
 
   const _MainShell({
+    required this.settingsRepo,
     required this.themeMode,
     required this.onThemeModeChanged,
   });
@@ -145,6 +165,7 @@ class _MainShellState extends State<_MainShell> {
         measurementRepo: repos.measurementRepo,
       ),
       SettingsScreen(
+        settingsRepo: widget.settingsRepo,
         onDataCleared: _onDataCleared,
         themeMode: widget.themeMode,
         onThemeModeChanged: widget.onThemeModeChanged,

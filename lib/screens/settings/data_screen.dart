@@ -1,26 +1,92 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../app_repositories.dart';
 import '../../core/app_logger.dart';
 import '../../db/database_helper.dart';
 import '../../models/workout_plan.dart';
 import '../../repositories/exercise_log_repository.dart';
 import '../../repositories/exercise_repository.dart';
+import '../../repositories/settings_repository.dart';
 import '../../services/share_service.dart';
 import '../../widgets/date_picker_field.dart';
 
 class DataScreen extends StatefulWidget {
+  final SettingsRepository settingsRepo;
   final VoidCallback onDataCleared;
 
-  const DataScreen({super.key, required this.onDataCleared});
+  const DataScreen({
+    super.key,
+    required this.settingsRepo,
+    required this.onDataCleared,
+  });
 
   @override
   State<DataScreen> createState() => _DataScreenState();
 }
 
 class _DataScreenState extends State<DataScreen> {
+  static final _tsFmt = DateFormat('dd MMM yyyy, HH:mm');
+
   bool _importing = false;
   bool _exportingPlan = false;
   bool _savingBackup = false;
+  bool _runningAutoBackup = false;
+
+  String? _backupFolderPath;
+  DateTime? _lastBackupTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackupSettings();
+  }
+
+  Future<void> _loadBackupSettings() async {
+    final folder = await widget.settingsRepo.getBackupFolderPath();
+    final ts = await widget.settingsRepo.getBackupLastTimestamp();
+    if (mounted) setState(() { _backupFolderPath = folder; _lastBackupTime = ts; });
+  }
+
+  Future<void> _pickBackupFolder() async {
+    final path = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select backup folder',
+    );
+    if (path == null) return;
+    await widget.settingsRepo.setBackupFolderPath(path);
+    if (mounted) setState(() => _backupFolderPath = path);
+    await _runBackupNow(showSnackbar: false);
+  }
+
+  Future<void> _runBackupNow({bool showSnackbar = true}) async {
+    if (_backupFolderPath == null) return;
+    setState(() => _runningAutoBackup = true);
+    try {
+      final repos = AppRepositories.of(context);
+      final ok = await ShareService.autoBackupToFolder(
+        repos.exerciseRepo,
+        repos.exerciseLogRepo,
+        widget.settingsRepo,
+        _backupFolderPath!,
+      );
+      if (!mounted) return;
+      final ts = await widget.settingsRepo.getBackupLastTimestamp();
+      if (!mounted) return;
+      setState(() => _lastBackupTime = ts);
+      if (showSnackbar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ok ? 'Backup saved.' : 'Backup failed. Check the selected folder.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _runningAutoBackup = false);
+    }
+  }
+
+  String _folderLabel(String path) {
+    final parts = path.replaceAll('\\', '/').split('/');
+    return parts.lastWhere((s) => s.isNotEmpty, orElse: () => path);
+  }
 
   Future<void> _saveBackup() async {
     setState(() => _savingBackup = true);
@@ -170,12 +236,40 @@ class _DataScreenState extends State<DataScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasFolder = _backupFolderPath != null;
+    final lastBackupSubtitle = _lastBackupTime != null
+        ? _tsFmt.format(_lastBackupTime!)
+        : 'Never';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Data')),
       body: ListView(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text('Auto backup', style: _sectionLabelStyle(context)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.folder_outlined),
+            title: const Text('Backup folder'),
+            subtitle: Text(hasFolder ? _folderLabel(_backupFolderPath!) : 'Not set — tap to choose'),
+            trailing: hasFolder ? const Icon(Icons.chevron_right) : null,
+            onTap: _pickBackupFolder,
+          ),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('Last backup'),
+            subtitle: Text(lastBackupSubtitle),
+          ),
+          ListTile(
+            leading: _loadingIcon(const Icon(Icons.backup), _runningAutoBackup),
+            title: const Text('Backup now'),
+            subtitle: const Text('Save a backup to the selected folder'),
+            onTap: (hasFolder && !_runningAutoBackup) ? () => _runBackupNow() : null,
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Text('Share', style: _sectionLabelStyle(context)),
           ),
           ListTile(
