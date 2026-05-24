@@ -16,12 +16,52 @@ flutter pub get          # Install dependencies
 flutter analyze          # Lint (uses flutter_lints)
 flutter test             # Run all tests
 flutter test test/foo_test.dart  # Run a single test file
-flutter run              # Run on connected device/emulator
-flutter build apk        # Build Android APK
-flutter build appbundle  # Build Android App Bundle
 flutter build ios        # Build iOS
 flutter build web        # Build web
 flutter build windows    # Build Windows desktop
+```
+
+### Devices
+
+```bash
+flutter devices          # List connected devices and emulators
+flutter emulators        # List available emulators (not yet running)
+flutter emulators --launch <emulator_id>  # Start a specific emulator
+```
+
+### Running the app
+
+```bash
+flutter run              # Run on the single connected device (prompts if multiple)
+flutter run -d <device_id>   # Run on a specific device (use ID from flutter devices)
+flutter run -d emulator-5554 # Example: run on a specific Android emulator
+flutter run --release    # Run release build (no debug overhead)
+```
+
+### Logs (clean output, no noise)
+
+```bash
+# PowerShell — show only Flutter/app lines
+flutter logs 2>&1 | sls "flutter"
+
+# adb — errors only (quietest option)
+adb logcat flutter:E *:S
+
+# adb — all Flutter log levels
+adb logcat -s flutter
+```
+
+### Build and install APK on connected phone
+
+```bash
+# Build a release APK and install it directly on the connected phone
+flutter build apk --release && adb install build\app\outputs\flutter-apk\app-release.apk
+
+# Build only (file saved to build/app/outputs/flutter-apk/app-release.apk)
+flutter build apk --release
+
+# Install a previously built APK (replace existing app)
+adb install -r build\app\outputs\flutter-apk\app-release.apk
 ```
 
 ## Architecture
@@ -44,7 +84,7 @@ lib/
     workout_plan_repository.dart
     workout_session_repository.dart
     measurement_repository.dart
-    settings_repository.dart  ← app preferences (theme mode); excluded from clearAll
+    settings_repository.dart  ← app preferences (theme mode, backup folder/timestamp); excluded from clearAll
   screens/
     exercises/              ← ExerciseListScreen, ExerciseDetailScreen, ExerciseFormScreen
     workouts/               ← WorkoutListScreen, WorkoutDetailScreen, WorkoutFormScreen,
@@ -53,7 +93,7 @@ lib/
     progress/               ← ProgressScreen, ExerciseProgressScreen, MeasurementProgressScreen
     settings/               ← SettingsScreen, DataScreen
   services/
-    share_service.dart      ← static helpers for export/import (workout plans, exercise logs)
+    share_service.dart      ← static helpers for export/import/auto-backup (workout plans, exercise logs, full backup)
   widgets/                  ← SetRowWidget, LinkRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar
 ```
 
@@ -65,7 +105,7 @@ lib/
 - **WorkoutPlan** — name, list of **WorkoutPlanEntry** (workoutId + dayOfWeek 1–7)
 - **WorkoutSession** — logs that a workout was performed on a date
 - **Measurement** — name only; entries are separate **MeasurementEntry** (value, unit, date)
-- **app_settings** — key/value table for app preferences (e.g. `theme_mode = 'dark'|'light'`)
+- **app_settings** — key/value table for app preferences (e.g. `theme_mode`, `backup_folder_path`, `backup_last_timestamp`)
 
 Volume = sum(reps × weight) across all sets in a SetTemplate (adimensional).
 
@@ -173,6 +213,7 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 ### Settings tab
 - **Display** section: Dark mode toggle (persisted via `SettingsRepository`).
 - **Data** section:
+  - **Auto backup**: user picks a folder once via `FilePicker.getDirectoryPath()`; path stored in `app_settings`. On every app launch, `ShareService.autoBackupToFolder` runs silently (fire-and-forget in `main()`), writing `workout_backup.txt` to that folder (always overwrites — no accumulation). `DataScreen` shows last backup timestamp and a "Backup now" button. Picking a folder triggers an immediate backup.
   - **Share**: Export workout plan (JSON), Export exercise logs (JSON + human-readable .txt, with period picker), Import workout plan (from JSON file).
   - **Save backup**: dumps all exercises (aliases, notes, set template) and all logs per exercise to a human-readable `.txt` file at a user-chosen location via `FilePicker.saveFile` (Storage Access Framework — no extra permissions needed).
   - **Manage data**: "Clear all data" — confirmation dialog, wipes all workout/exercise/measurement data, re-seeds default Weight measurement, preserves app preferences.
@@ -185,6 +226,7 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Auto backup**: Settings → Data → Auto backup. User picks a folder once; on every app launch the app silently writes `workout_backup.txt` there (overwrites). `SettingsRepository` stores `backup_folder_path` and `backup_last_timestamp`. `ShareService.autoBackupToFolder` handles the write without any UI dependency. `SettingsRepository` is now threaded through `_MainShell` → `SettingsScreen` → `DataScreen`.
 - **Exercise links**: Each exercise now has an ordered list of links (label + URL). Stored in `exercise_links` table (schema v3). Tappable tiles in `ExerciseDetailScreen` open the system browser. Managed in `ExerciseFormScreen` with the same add/remove/edit pattern as sets. `url_launcher` added; Android `<queries>` block updated for http/https. `LinkRowWidget` added to `lib/widgets/`.
 - **Save backup**: Settings → Data → Save backup. Writes a plain-text file (exercises section + logs-per-exercise section) to a user-chosen location via `FilePicker.saveFile`. Uses `ExerciseLogRepository.getAll()`.
 - **Progress chart fix**: `ProgressLineChart` was not updating when the filter changed because `_series` was only set in `initState`. Added `didUpdateWidget` to sync series on widget update.
