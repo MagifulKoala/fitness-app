@@ -92,11 +92,16 @@ class _DataScreenState extends State<DataScreen> {
     setState(() => _savingBackup = true);
     try {
       final repos = AppRepositories.of(context);
-      await ShareService.saveFullBackup(
+      final ok = await ShareService.saveFullBackup(
         repos.exerciseRepo,
         repos.exerciseLogRepo,
         context,
       );
+      if (ok && mounted) {
+        await widget.settingsRepo.setBackupLastTimestamp(DateTime.now());
+        final ts = await widget.settingsRepo.getBackupLastTimestamp();
+        if (mounted) setState(() => _lastBackupTime = ts);
+      }
     } finally {
       if (mounted) setState(() => _savingBackup = false);
     }

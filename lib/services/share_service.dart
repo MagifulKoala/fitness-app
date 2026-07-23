@@ -213,7 +213,8 @@ class ShareService {
 
   // ─── Save full backup ─────────────────────────────────────────────────────
 
-  static Future<void> saveFullBackup(
+  /// Returns true if the file was saved, false if cancelled or on error.
+  static Future<bool> saveFullBackup(
     ExerciseRepository exerciseRepo,
     ExerciseLogRepository logRepo,
     BuildContext context,
@@ -244,7 +245,9 @@ class ShareService {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Backup saved.')),
         );
+        return true;
       }
+      return false;
     } catch (e, st) {
       log.e('[ShareService] saveFullBackup failed', error: e, stackTrace: st);
       if (context.mounted) {
@@ -252,6 +255,7 @@ class ShareService {
           const SnackBar(content: Text('Failed to save backup.')),
         );
       }
+      return false;
     }
   }
 

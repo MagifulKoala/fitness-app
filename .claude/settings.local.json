@@ -5,7 +5,9 @@
       "Bash(flutter pub:*)",
       "Bash(flutter analyze:*)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(xargs grep *)",
+      "Bash(grep -E \"\\\\.dart$\")"
     ]
   }
 }

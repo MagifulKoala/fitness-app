@@ -10,9 +10,9 @@ DateTime windowStart(ChartFilter filter, DateTime customFrom) {
   final today = DateTime(now.year, now.month, now.day);
   return switch (filter) {
     ChartFilter.day => today,
-    ChartFilter.week => today.subtract(const Duration(days: 6)),
-    ChartFilter.month => today.subtract(const Duration(days: 29)),
-    ChartFilter.year => DateTime(today.year - 1, today.month, today.day),
+    ChartFilter.week => today.subtract(Duration(days: today.weekday - 1)), // Monday
+    ChartFilter.month => DateTime(today.year, today.month, 1),
+    ChartFilter.year => DateTime(today.year, 1, 1),
     ChartFilter.all => DateTime(2000),
     ChartFilter.custom => customFrom,
   };
@@ -22,7 +22,15 @@ DateTime windowEnd(ChartFilter filter, DateTime customTo) {
   if (filter == ChartFilter.custom) return customTo;
   if (filter == ChartFilter.all) return DateTime(9999, 12, 30); // include future-dated entries
   final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final monday = today.subtract(Duration(days: today.weekday - 1));
+  return switch (filter) {
+    ChartFilter.day => today,
+    ChartFilter.week => monday.add(const Duration(days: 6)), // Sunday
+    ChartFilter.month => DateTime(today.year, today.month + 1, 0), // last day of month
+    ChartFilter.year => DateTime(today.year, 12, 31),
+    ChartFilter.all || ChartFilter.custom => today, // unreachable
+  };
 }
 
 bool showDots(ChartFilter filter, DateTime from, DateTime to) {

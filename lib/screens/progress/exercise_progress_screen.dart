@@ -90,7 +90,7 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
     final filteredLogs = _filteredLogs;
     final ChartGranularity granularity;
     final bool dots;
-    if (_filter == ChartFilter.all && filteredLogs.length >= 2) {
+    if (filteredLogs.length >= 2) {
       granularity = adaptiveGranularity(filteredLogs.first.date, filteredLogs.last.date);
       dots = filteredLogs.last.date.difference(filteredLogs.first.date).inDays <= 60;
     } else {
@@ -133,6 +133,7 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
                                     showDots: dots,
                                     logRepo: widget.logRepo,
                                     onChanged: _load,
+                                    filter: _filter,
                                   ),
                                   _TableView(
                                     logs: filteredLogs,
@@ -157,6 +158,7 @@ class _GraphView extends StatefulWidget {
   final bool showDots;
   final ExerciseLogRepository logRepo;
   final VoidCallback onChanged;
+  final ChartFilter filter;
 
   const _GraphView({
     required this.logs,
@@ -164,6 +166,7 @@ class _GraphView extends StatefulWidget {
     required this.showDots,
     required this.logRepo,
     required this.onChanged,
+    required this.filter,
   });
 
   @override
@@ -176,7 +179,9 @@ class _GraphViewState extends State<_GraphView> {
   @override
   void didUpdateWidget(_GraphView old) {
     super.didUpdateWidget(old);
-    if (old.granularity != widget.granularity) _selectedLog = null;
+    if (old.granularity != widget.granularity || old.filter != widget.filter) {
+      _selectedLog = null;
+    }
   }
 
   void _onSpotTouched(int index) {
@@ -200,24 +205,12 @@ class _GraphViewState extends State<_GraphView> {
         .map((e) => FlSpot(e.key.toDouble(), e.value.volume))
         .toList();
     final dates = points.map((p) => p.date).toList();
-    if (points.length < 2) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            'Not enough data to draw a chart in this period.\n'
-            'Try "All" or "Custom" to see a longer range.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-          ),
-        ),
-      );
+    if (points.isEmpty) {
+      return const Center(child: Text('No data in this period.'));
     }
 
     final isRaw = widget.granularity == ChartGranularity.raw;
-    final showDots = widget.showDots;
+    final showDots = points.length == 1 ? true : widget.showDots;
 
     return SingleChildScrollView(
       child: Padding(
@@ -239,6 +232,7 @@ class _GraphViewState extends State<_GraphView> {
               dates: dates,
               showDots: showDots,
               onSpotTouched: isRaw ? _onSpotTouched : null,
+              granularity: widget.granularity,
             ),
             if (_selectedLog != null && isRaw) ...[
               const SizedBox(height: 16),

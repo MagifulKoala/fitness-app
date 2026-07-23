@@ -82,7 +82,7 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
     final filteredEntries = _filteredEntries;
     final ChartGranularity granularity;
     final bool dots;
-    if (_filter == ChartFilter.all && filteredEntries.length >= 2) {
+    if (filteredEntries.length >= 2) {
       granularity = adaptiveGranularity(filteredEntries.first.date, filteredEntries.last.date);
       dots = filteredEntries.last.date.difference(filteredEntries.first.date).inDays <= 60;
     } else {
@@ -122,6 +122,7 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
                                     entries: filteredEntries,
                                     granularity: granularity,
                                     showDots: dots,
+                                    filter: _filter,
                                   ),
                                   _TableView(
                                     entries: filteredEntries,
@@ -144,11 +145,13 @@ class _GraphView extends StatelessWidget {
   final List<MeasurementEntry> entries;
   final ChartGranularity granularity;
   final bool showDots;
+  final ChartFilter filter;
 
   const _GraphView({
     required this.entries,
     required this.granularity,
     required this.showDots,
+    required this.filter,
   });
 
   @override
@@ -160,24 +163,12 @@ class _GraphView extends StatelessWidget {
         .map((e) => FlSpot(e.key.toDouble(), e.value.value))
         .toList();
     final dates = points.map((p) => p.date).toList();
-    if (points.length < 2) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            'Not enough data to draw a chart in this period.\n'
-            'Try "All" or "Custom" to see a longer range.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-          ),
-        ),
-      );
+    if (points.isEmpty) {
+      return const Center(child: Text('No data in this period.'));
     }
 
-    final unit = points.isNotEmpty ? points.first.unit : '';
-    final effectiveShowDots = showDots;
+    final unit = points.first.unit;
+    final effectiveShowDots = points.length == 1 ? true : showDots;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -187,6 +178,7 @@ class _GraphView extends StatelessWidget {
         ],
         dates: dates,
         showDots: effectiveShowDots,
+        granularity: granularity,
       ),
     );
   }

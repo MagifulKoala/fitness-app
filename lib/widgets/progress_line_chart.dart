@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'chart_filter_bar.dart';
 
 class ChartSeries {
   final String label;
@@ -21,6 +22,7 @@ class ProgressLineChart extends StatefulWidget {
   final List<DateTime> dates; // parallel to x-axis indices
   final bool showDots;
   final void Function(int spotIndex)? onSpotTouched;
+  final ChartGranularity? granularity;
 
   const ProgressLineChart({
     super.key,
@@ -28,6 +30,7 @@ class ProgressLineChart extends StatefulWidget {
     required this.dates,
     this.showDots = true,
     this.onSpotTouched,
+    this.granularity,
   });
 
   @override
@@ -48,6 +51,18 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
     super.didUpdateWidget(old);
     if (old.series != widget.series) {
       _series = widget.series;
+    }
+  }
+
+  static String _axisLabel(DateTime date, ChartGranularity? granularity) {
+    switch (granularity) {
+      case ChartGranularity.month:
+        return DateFormat('MMM').format(date);
+      case ChartGranularity.week:
+        final weekOfMonth = ((date.day - 1) ~/ 7) + 1;
+        return 'W$weekOfMonth ${DateFormat('MMM').format(date)}';
+      default:
+        return DateFormat('dd/MM').format(date);
     }
   }
 
@@ -126,7 +141,7 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
                       return Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          DateFormat('dd/MM').format(widget.dates[idx]),
+                          _axisLabel(widget.dates[idx], widget.granularity),
                           style: const TextStyle(fontSize: 10),
                         ),
                       );

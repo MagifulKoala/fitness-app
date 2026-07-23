@@ -203,10 +203,12 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 ### Progress tab
 - **Exercises sub-tab**: searchable list of all exercises (filters by name and alias) → `ExerciseProgressScreen`.
   - Line chart with Avg Weight and Volume series; tapping a dot opens a log detail panel (edit/delete).
-  - Time filter bar: Day / Week / Month / Year / All / Custom. Granularity auto-adjusts (raw → daily → weekly → monthly). `All` filter uses adaptive granularity based on the actual data span so all logs are visible.
+  - Time filter bar: Day / Week / Month / Year / All / Custom. Filter windows are **calendar-aligned** (Week = Mon–Sun of current week, Month = 1st–last day of current month, Year = Jan 1–Dec 31). Granularity auto-adjusts for any filter with 2+ data points (raw → daily → weekly → monthly). `All` uses adaptive granularity based on the actual data span.
+  - X-axis labels are granularity-aware: monthly view shows "MMM", weekly shows "W1 Jan", other views show "dd/MM".
+  - When only one aggregated point exists, the dot is always shown.
   - Data table (Weight and Volume sub-tabs) shows raw individual log entries within the selected window, with edit/delete per row.
 - **Body sub-tab**: searchable list of all measurements (filters by name) → `MeasurementProgressScreen`.
-  - Same filter bar and adaptive granularity as the exercise screen.
+  - Same filter bar, calendar-aligned windows, adaptive granularity, and axis labels as the exercise screen.
   - Single-series line chart; table shows raw entries within the selected window with edit/delete.
 - Tab state is refreshed whenever the Progress tab is selected (via `GlobalKey<ProgressScreenState>`).
 
@@ -215,7 +217,7 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 - **Data** section:
   - **Auto backup**: user picks a folder once via `FilePicker.getDirectoryPath()`; path stored in `app_settings`. On every app launch, `ShareService.autoBackupToFolder` runs silently (fire-and-forget in `main()`), writing `workout_backup.txt` to that folder (always overwrites — no accumulation). `DataScreen` shows last backup timestamp and a "Backup now" button. Picking a folder triggers an immediate backup.
   - **Share**: Export workout plan (JSON), Export exercise logs (JSON + human-readable .txt, with period picker), Import workout plan (from JSON file).
-  - **Save backup**: dumps all exercises (aliases, notes, set template) and all logs per exercise to a human-readable `.txt` file at a user-chosen location via `FilePicker.saveFile` (Storage Access Framework — no extra permissions needed).
+  - **Save backup**: dumps all exercises (aliases, notes, set template) and all logs per exercise to a human-readable `.txt` file at a user-chosen location via `FilePicker.saveFile` (Storage Access Framework — no extra permissions needed). On success, updates the last backup timestamp (same as auto-backup) so `DataScreen` reflects it.
   - **Manage data**: "Clear all data" — confirmation dialog, wipes all workout/exercise/measurement data, re-seeds default Weight measurement, preserves app preferences.
 
 ### Share / Import (trainer ↔ client workflow)
@@ -226,11 +228,16 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Calendar-aligned chart filter windows**: `windowStart`/`windowEnd` in `ChartFilterBar` now use calendar boundaries — Week = Mon–Sun of current week, Month = 1st–last day of current month, Year = Jan 1–Dec 31 — instead of rolling N-day windows.
+- **Granularity-aware x-axis labels**: `ProgressLineChart` now accepts a `granularity` parameter. Monthly view labels as "MMM", weekly as "W1 Jan", others as "dd/MM".
+- **Adaptive granularity for all filters**: Both progress screens apply adaptive granularity (based on the data span) whenever there are 2+ filtered data points, not just for the "All" filter.
+- **Single-point dot always shown**: When only one aggregated point exists in the chart, `showDots` is forced to `true` regardless of the density setting.
+- **Simplified empty chart state**: Replaced the verbose "Not enough data…" hint with "No data in this period." Chart now renders with 1+ points (was 2+).
+- **Save backup updates timestamp**: `ShareService.saveFullBackup` returns `bool` (true = saved, false = cancelled/error). `DataScreen` now updates the last backup timestamp on success, consistent with auto-backup.
 - **Auto backup**: Settings → Data → Auto backup. User picks a folder once; on every app launch the app silently writes `workout_backup.txt` there (overwrites). `SettingsRepository` stores `backup_folder_path` and `backup_last_timestamp`. `ShareService.autoBackupToFolder` handles the write without any UI dependency. `SettingsRepository` is now threaded through `_MainShell` → `SettingsScreen` → `DataScreen`.
 - **Exercise links**: Each exercise now has an ordered list of links (label + URL). Stored in `exercise_links` table (schema v3). Tappable tiles in `ExerciseDetailScreen` open the system browser. Managed in `ExerciseFormScreen` with the same add/remove/edit pattern as sets. `url_launcher` added; Android `<queries>` block updated for http/https. `LinkRowWidget` added to `lib/widgets/`.
 - **Save backup**: Settings → Data → Save backup. Writes a plain-text file (exercises section + logs-per-exercise section) to a user-chosen location via `FilePicker.saveFile`. Uses `ExerciseLogRepository.getAll()`.
 - **Progress chart fix**: `ProgressLineChart` was not updating when the filter changed because `_series` was only set in `initState`. Added `didUpdateWidget` to sync series on widget update.
-
 - **Dark mode**: Settings → Display → Dark mode toggle. Persisted in `app_settings` SQLite table (schema v2). Survives data wipes. Theme owned by `WorkoutApp` state and loaded async on startup.
 - **Progress search bars**: Both the Exercises and Body sub-tabs on the Progress screen now have a search bar that filters the list in real time (exercises match on name and aliases; measurements match on name).
 - **Workout form search + sort**: Exercise picker in `WorkoutFormScreen` shows currently-included exercises first (sorted once at load, stable during toggling) and has a search bar filtering by name and alias.
