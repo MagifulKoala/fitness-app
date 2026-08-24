@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overrides the main source set's app_name for debug builds only, so the
+         side-by-side dev install is distinguishable on the home screen. -->
+    <string name="app_name">workout_app dev</string>
+</resources>

@@ -64,6 +64,63 @@ flutter build apk --release
 adb install -r build\app\outputs\flutter-apk\app-release.apk
 ```
 
+### Connecting a phone over USB (one-time setup)
+
+1. **Settings → About phone → tap "Build number" 7 times** — unlocks Developer options.
+2. **Settings → Developer options → enable "USB debugging"**.
+3. Connect with a **data** USB cable. Charge-only cables carry no data and the phone will never appear.
+4. Accept the **"Allow USB debugging?"** prompt on the phone → tick *Always allow* → **Allow**.
+
+Step 4 is the one that gets missed. Until it is accepted the device shows as `unauthorized`.
+
+```bash
+adb devices     # expect: "<serial>    device"
+```
+
+| `adb devices` output | Meaning |
+|---|---|
+| `<serial>  device` | Ready |
+| `<serial>  unauthorized` | The on-phone prompt has not been accepted |
+| empty list | Cable is charge-only, or USB debugging is off |
+
+### Screenshots from a device
+
+Capture the framebuffer straight off the phone or emulator as a pixel-perfect PNG:
+
+```bash
+adb exec-out screencap -p > screenshot.png
+```
+
+The command prints nothing — it silently writes `screenshot.png` into the current
+directory. `screencap` runs **on the device** and encodes the PNG there; `exec-out`
+streams those raw bytes back over USB and `>` redirects them to a file on the PC.
+The result is the device's native resolution with no scaling or window chrome.
+
+**Use `exec-out`, never `shell`.** `adb shell screencap -p > f.png` looks equivalent
+but writes a **corrupt** PNG on Windows: `shell` runs in text mode and mangles
+newline bytes inside the binary stream. `exec-out` is a raw binary channel.
+
+```bash
+# Timestamped, so captures don't overwrite each other (PowerShell)
+adb exec-out screencap -p > "shot-$(Get-Date -Format 'HHmmss').png"
+
+# Record video instead (Ctrl+C to stop), then pull it
+adb shell screenrecord /sdcard/demo.mp4
+adb pull /sdcard/demo.mp4
+```
+
+With both a phone and an emulator connected, `adb` errors with "more than one
+device". Disambiguate with `-s`:
+
+```bash
+adb devices                                          # copy the serial
+adb -s <serial> exec-out screencap -p > shot.png
+```
+
+Optional live mirroring / control from the PC: `winget install Genymobile.scrcpy`,
+then run `scrcpy`. Not needed for screenshots — capture the framebuffer directly
+instead, since screenshotting a mirror window is lossy.
+
 ## Architecture
 
 Entry point is `lib/main.dart`. Repositories are injected at startup via `AppRepositories` (`lib/app_repositories.dart`), an `InheritedWidget` that makes all repos available anywhere in the tree. `SettingsRepository` is the exception — it is passed directly to `WorkoutApp` and not added to `AppRepositories` because it is a UI-level concern unrelated to workout data.
@@ -161,6 +218,79 @@ adb logcat flutter:E *:S            # errors only
 | 1 | Initial schema (exercises, workouts, plans, sessions, measurements) |
 | 2 | Added `app_settings` key-value table for app preferences |
 | 3 | Added `exercise_links` table (id, exercise_id, url, label, sort_order) |
+
+## Protecting Real Data on a Daily-Driver Phone
+
+The phone used for development also holds **real workout history**. Two properties of
+this project make that data easy to destroy by accident.
+
+### 1. Both build types are signed with the local debug keystore
+
+`android/app/build.gradle.kts` sets `release { signingConfig = signingConfigs.getByName("debug") }`.
+The debug keystore (`~/.android/debug.keystore`) is **generated per machine**, so an
+APK built on a different computer has a different signature than the one installed
+on the phone. Android refuses to update across a signature change:
+
+```
+INSTALL_FAILED_UPDATE_INCOMPATIBLE
+```
+
+The usual "fix" (`adb uninstall com.example.workout_app`) **deletes the app's
+SQLite database along with it**. Never run that on the phone holding real data.
+
+To keep in-place updates working across machines, copy `~/.android/debug.keystore`
+from the original machine to the new one **before building**.
+
+### 2. The in-app backup is not a restore path
+
+`ShareService.saveFullBackup` and `autoBackupToFolder` write **human-readable `.txt`**,
+and `exportLogs` writes JSON — but `importWorkoutPlan` is the **only** import function
+in the codebase. There is no importer for logs, measurements, or a full backup.
+`saveFullBackup` also covers only exercises and logs — **measurements are not
+included in any backup at all**.
+
+Treat the `.txt`/JSON exports as an archive, not a restore. The only faithful backup
+is the raw SQLite file (`workout_app.db` in the app documents directory).
+
+### Safe pattern: side-by-side dev build (implemented)
+
+Debug builds use a different `applicationId` so they install **alongside** the real
+app instead of replacing it. `android/app/build.gradle.kts` sets:
+
+```kotlin
+buildTypes {
+    debug {
+        applicationIdSuffix = ".dev"
+    }
+}
+```
+
+| Build type | applicationId | Home-screen label |
+|---|---|---|
+| release | `com.example.workout_app` | workout_app |
+| debug | `com.example.workout_app.dev` | workout_app dev |
+
+The label comes from `@string/app_name`, defined in `android/app/src/main/res/values/strings.xml`
+and overridden for debug by `android/app/src/debug/res/values/strings.xml` — a
+build-type source-set override, which avoids the duplicate-resource error that
+`resValue` would cause alongside a declared string.
+
+The dev build gets its own package, its own private data directory, and therefore its
+own empty database. The production app and its history are never touched — no
+signature clash, no uninstall, no data loss. `flutter run` targets the debug build by
+default, so day-to-day development is safe automatically.
+
+**`applicationIdSuffix` does not change the Kotlin namespace** — `MainActivity.kt`
+stays in `com.example.workout_app`. Nothing else in the project keys off the
+applicationId (no Firebase, no `google-services.json`), so the suffix is self-contained.
+
+Building `--release` still produces the real package, so shipping to the phone is
+unchanged. Note that a release build made on a machine whose `debug.keystore` differs
+from the phone's installed copy still hits the signature clash described above.
+
+Note that `adb shell run-as <pkg>` (the only way to read app-private files without
+root) works **only on debuggable builds**, so the DB of an installed *release* build
+cannot be pulled off a non-rooted phone.
 
 ## Theme / Dark Mode
 

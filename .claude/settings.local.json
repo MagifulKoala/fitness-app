@@ -7,7 +7,8 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(xargs grep *)",
-      "Bash(grep -E \"\\\\.dart$\")"
+      "Bash(grep -E \"\\\\.dart$\")",
+      "PowerShell(flutter doctor *)"
     ]
   }
 }

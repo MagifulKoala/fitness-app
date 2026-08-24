@@ -31,6 +31,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Installs alongside the production app instead of replacing it, so
+            // development can never touch real workout history on a daily-driver
+            // phone. The dev build gets its own package, its own private data
+            // directory, and therefore its own empty database.
+            // See "Protecting Real Data on a Daily-Driver Phone" in CLAUDE.md.
+            applicationIdSuffix = ".dev"
+        }
+
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
