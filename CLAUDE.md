@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Context — read first
+
+`claude-context/` holds dated session summaries (`YYYY-MM-DD-session-summary.md`) describing
+recent work, decisions, and **open items / next steps**. At the start of every session, read
+the most recent file(s) there to see what is going on with the app before making changes.
+At the end of a session with significant work, add a new summary in the same format.
+
 ## Project
 
 Flutter workout/fitness tracking app targeting **Android** (primary). Cross-platform support configured for iOS, Web, Linux, macOS, Windows.
