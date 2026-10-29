@@ -172,6 +172,7 @@ flutter test test/repositories_test.dart
 | `test/sample_data_test.dart` | sample data loads, is consistent and contains its edge cases |
 | `test/progress_line_chart_test.dart` | chart widget renders 1–2 series and toggles |
 | `test/plan_schedule_test.dart` | `planScheduleByDay` grouping, rest days, deleted workouts |
+| `test/bottom_action_bar_test.dart` | Save bar stays above 0 / gesture / 3-button nav bar heights |
 
 Database tests run on desktop SQLite via `sqflite_common_ffi`. `test/helpers/test_db.dart`
 points `DatabaseHelper` at a fresh in-memory database per test
@@ -211,7 +212,8 @@ lib/
   services/
     share_service.dart      ← static helpers for export/import/auto-backup (workout plans, exercise logs, full backup)
   widgets/                  ← SetRowWidget, LinkRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar,
-                               AxisScale (pure y-axis scaling used by ProgressLineChart)
+                               AxisScale (pure y-axis scaling used by ProgressLineChart),
+                               BottomActionBar (Save button pinned above the system nav bar)
 test/                       ← unit + widget tests (see Testing); helpers/test_db.dart = in-memory DB
 ```
 
@@ -361,6 +363,23 @@ cannot be pulled off a non-rooted phone.
 - The callback propagates: `WorkoutApp._onThemeModeChanged` → `_MainShell` → `SettingsScreen`.
 - `SettingsRepository.setThemeMode()` persists the change (fire-and-forget, no await needed).
 
+## System Navigation Bar (edge-to-edge)
+
+Since Android 15 the app draws **behind** the system nav bar. Its height depends on the user's
+setting: a thin gesture handle (the emulator default) or the much taller **3-button bar**
+(back / home / recents, e.g. the Samsung Galaxy A54). Anything at the bottom of a screen must
+make room for it, or it hides under the buttons:
+
+- **Primary actions (Save / Create)** go in `Scaffold.bottomNavigationBar: BottomActionBar(...)`
+  (`lib/widgets/bottom_action_bar.dart`), never at the end of a scrolling list.
+- **`ListView` with explicit `padding`** loses Flutter's automatic inset; add
+  `MediaQuery.paddingOf(context).bottom` to the bottom padding (`ListView` with no `padding`
+  handles it already).
+- **Bottom sheets** add `MediaQuery.viewPaddingOf(context).bottom` to their padding.
+- **Test UI with 3-button nav** on the emulator:
+  `adb shell cmd overlay enable com.android.internal.systemui.navbar.threebutton`
+  (revert with `...navbar.gestural`).
+
 ## FAB Hero Tags
 
 Every `FloatingActionButton` in the app sets `heroTag: null`. The main shell uses an `IndexedStack` which keeps all tab screens mounted simultaneously, so multiple FABs exist in the widget tree at once. Without unique tags Flutter throws a "multiple heroes with the same tag" assertion at navigation time.
@@ -426,6 +445,10 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Save buttons hidden by the 3-button nav bar (fix)**: on phones using 3-button navigation the
+  Save/Create button at the end of the workout, exercise and plan forms sat under the system bar.
+  It is now pinned in a `BottomActionBar`, always visible. Workout/exercise detail lists and the
+  progress chart/table also reserve the nav-bar inset. See *System Navigation Bar*.
 - **Plan view mode**: tapping a plan now opens a read-only `WorkoutPlanDetailScreen` (weekly schedule; tap a
   workout to open it). The old edit screen is now `WorkoutPlanFormScreen`, reached via the Edit icon or the
   Plans FAB. Export/Delete moved to the view screen. Sample data: PPL Saturday has two workouts.

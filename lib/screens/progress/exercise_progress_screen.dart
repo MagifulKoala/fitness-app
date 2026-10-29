@@ -144,6 +144,8 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
                                 ],
                               ),
                   ),
+                  // Keep the chart / table clear of the system nav bar.
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom),
                 ],
               ),
       ),

@@ -111,7 +111,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+            16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
           if (_workout.notes != null && _workout.notes!.isNotEmpty) ...[
             Text('Notes', style: Theme.of(context).textTheme.labelLarge),

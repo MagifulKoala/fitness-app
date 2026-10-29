@@ -215,7 +215,8 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+            16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
           if (_exercise.aliases.isNotEmpty) ...[
             Text('Aliases',

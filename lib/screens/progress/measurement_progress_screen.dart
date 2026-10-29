@@ -133,6 +133,8 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
                                 ],
                               ),
                   ),
+                  // Keep the chart / table clear of the system nav bar.
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom),
                 ],
               ),
       ),

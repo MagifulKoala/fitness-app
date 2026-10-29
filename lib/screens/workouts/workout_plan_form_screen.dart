@@ -5,6 +5,7 @@ import '../../models/workout_plan.dart';
 import '../../models/workout_plan_entry.dart';
 import '../../repositories/workout_plan_repository.dart';
 import '../../repositories/workout_repository.dart';
+import '../../widgets/bottom_action_bar.dart';
 
 class WorkoutPlanFormScreen extends StatefulWidget {
   final WorkoutPlan? plan;
@@ -115,9 +116,12 @@ class _WorkoutPlanFormScreenState extends State<WorkoutPlanFormScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Plan' : 'New Plan'),
       ),
+      bottomNavigationBar: BottomActionBar(
+        label: _isEdit ? 'Save Plan' : 'Create Plan',
+        onPressed: _saving ? null : _save,
+      ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
+        padding: const EdgeInsets.all(16),
         children: [
           TextField(
             controller: _nameCtrl,
@@ -154,11 +158,6 @@ class _WorkoutPlanFormScreenState extends State<WorkoutPlanFormScreen> {
               ),
             );
           }),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _saving ? null : _save,
-            child: Text(_isEdit ? 'Save Plan' : 'Create Plan'),
-          ),
         ],
       ),
     );

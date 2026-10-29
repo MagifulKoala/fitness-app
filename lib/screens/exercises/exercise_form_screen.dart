@@ -7,6 +7,7 @@ import '../../models/set_template.dart';
 import '../../repositories/exercise_repository.dart';
 import '../../widgets/link_row_widget.dart';
 import '../../widgets/set_row_widget.dart';
+import '../../widgets/bottom_action_bar.dart';
 
 class ExerciseFormScreen extends StatefulWidget {
   final ExerciseRepository exerciseRepo;
@@ -163,6 +164,10 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
             ),
         ],
       ),
+      bottomNavigationBar: BottomActionBar(
+        label: _isEdit ? 'Save Changes' : 'Create Exercise',
+        onPressed: _saving ? null : _save,
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -268,11 +273,6 @@ class _ExerciseFormScreenState extends State<ExerciseFormScreen> {
                 ),
               );
             }),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_isEdit ? 'Save Changes' : 'Create Exercise'),
-            ),
           ],
         ),
       ),

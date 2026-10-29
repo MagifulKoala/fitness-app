@@ -4,6 +4,7 @@ import '../../models/exercise.dart';
 import '../../models/workout.dart';
 import '../../repositories/exercise_repository.dart';
 import '../../repositories/workout_repository.dart';
+import '../../widgets/bottom_action_bar.dart';
 
 class WorkoutFormScreen extends StatefulWidget {
   final WorkoutRepository workoutRepo;
@@ -107,6 +108,10 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? 'Edit Workout' : 'New Workout')),
+      bottomNavigationBar: BottomActionBar(
+        label: _isEdit ? 'Save Changes' : 'Create Workout',
+        onPressed: _saving ? null : _save,
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -174,11 +179,6 @@ class _WorkoutFormScreenState extends State<WorkoutFormScreen> {
                   ),
                 ),
             ],
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_isEdit ? 'Save Changes' : 'Create Workout'),
-            ),
           ],
         ),
       ),
