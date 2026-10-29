@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'axis_scale.dart';
 import 'chart_filter_bar.dart';
 
 class ChartSeries {
@@ -74,8 +75,47 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
     return 6;
   }
 
+  /// Y-axis labels for [scale], tinted with the series colour when the chart
+  /// has two axes so it is clear which axis belongs to which line.
+  static AxisTitles _yTitles(AxisScale? scale, Color? color) {
+    if (scale == null) {
+      return const AxisTitles(sideTitles: SideTitles(showTitles: false));
+    }
+    return AxisTitles(
+      sideTitles: SideTitles(
+        showTitles: true,
+        reservedSize: 40,
+        interval: 1 / AxisScale.intervals,
+        getTitlesWidget: (value, meta) {
+          // fl_chart also asks for labels at min/max; only draw real ticks.
+          final ticks = value * AxisScale.intervals;
+          if ((ticks - ticks.round()).abs() > 1e-6) {
+            return const SizedBox.shrink();
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              AxisScale.format(scale.denormalize(value)),
+              style: TextStyle(fontSize: 10, color: color),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Each visible series gets its own scale, normalized to 0..1, so series
+    // with very different magnitudes are all readable. The first two visible
+    // series get the left and right axis respectively.
+    final visible =
+        _series.where((s) => s.visible && s.spots.isNotEmpty).toList();
+    final scales = [
+      for (final s in visible) AxisScale.fit(s.spots.map((p) => p.y)),
+    ];
+    final twoAxes = visible.length >= 2;
+
     return Column(
       children: [
         // Legend / toggles
@@ -96,13 +136,21 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
           aspectRatio: 1.7,
           child: LineChart(
             LineChartData(
-              lineBarsData: _series
-                  .where((s) => s.visible && s.spots.isNotEmpty)
+              minY: 0,
+              maxY: 1,
+              lineBarsData: [
+                for (var i = 0; i < visible.length; i++)
+                  (visible[i], scales[i]),
+              ]
                   .map(
-                    (s) => LineChartBarData(
-                      spots: s.spots,
-                      color: s.color,
+                    (pair) => LineChartBarData(
+                      spots: [
+                        for (final p in pair.$1.spots)
+                          FlSpot(p.x, pair.$2.normalize(p.y)),
+                      ],
+                      color: pair.$1.color,
                       isCurved: true,
+                      preventCurveOverShooting: true,
                       dotData: FlDotData(
                         show: widget.showDots,
                         getDotPainter: (spot, percent, bar, index) =>
@@ -148,24 +196,22 @@ class _ProgressLineChartState extends State<ProgressLineChart> {
                     },
                   ),
                 ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 40,
-                    getTitlesWidget: (value, meta) => Text(
-                      value.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  ),
+                leftTitles: _yTitles(
+                  scales.isNotEmpty ? scales[0] : null,
+                  twoAxes ? visible[0].color : null,
                 ),
                 topTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
+                rightTitles: _yTitles(
+                  twoAxes ? scales[1] : null,
+                  twoAxes ? visible[1].color : null,
                 ),
               ),
-              gridData: const FlGridData(show: true),
+              gridData: const FlGridData(
+                show: true,
+                horizontalInterval: 1 / AxisScale.intervals,
+              ),
               borderData: FlBorderData(show: true),
             ),
           ),

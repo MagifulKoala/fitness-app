@@ -121,6 +121,54 @@ Optional live mirroring / control from the PC: `winget install Genymobile.scrcpy
 then run `scrcpy`. Not needed for screenshots — capture the framebuffer directly
 instead, since screenshotting a mirror window is lossy.
 
+## Development Workflow (good practices for every change)
+
+1. **Develop on the `.dev` build** (`flutter run`, emulator or phone). It has its own
+   database, so the real app's data is never at risk. See *Protecting Real Data* below.
+2. **Test against sample data.** Settings → Data → Developer → *Load sample data* gives
+   ~14 months of realistic history plus edge cases in ~2 s. Reload it whenever you
+   want a known starting point.
+3. **Keep the sample data in sync with the app.** `lib/dev/sample_data.dart` must
+   reflect the app *as it currently is*. Whenever a change adds or alters a model
+   field, table, screen or feature:
+   - populate the new thing in `SampleData.load` with realistic values;
+   - add its edge cases (empty, single item, zero, extreme or mixed units, etc.) and
+     list them in the class doc comment;
+   - extend `test/sample_data_test.dart` to assert the new data is there.
+   Sample data that never exercises a feature cannot catch that feature's bugs.
+4. **Schema changes** touch several places at once: bump the DB version and add a new
+   `_onUpgrade` block, add the table to `clearAll()`, update the migration-history
+   table below, update `SampleData` (and its bulk-write section if the table holds
+   history), and check whether backups/exports in `ShareService` should include it.
+5. **Write or update unit tests** for any new logic (see *Testing*). Put pure logic
+   (aggregation, scales, date windows) in plain functions/classes so it can be tested
+   without widgets.
+6. **Before committing:** `flutter analyze` and `flutter test` must both be clean.
+   For UI changes, also check the screen on the emulator in light and dark mode
+   (screenshots: see *Screenshots from a device*).
+7. Update this file for major changes, then commit (see *Commits and Version Control*).
+
+## Testing
+
+```bash
+flutter test                         # everything (~seconds, no device needed)
+flutter test test/repositories_test.dart
+```
+
+| File | Covers |
+|---|---|
+| `test/models_test.dart` | `toMap`/`fromMap` round-trips, volume / avg weight |
+| `test/chart_filter_test.dart` | calendar windows, granularity, period keys, dots |
+| `test/axis_scale_test.dart` | chart y-axis scaling and tick labels |
+| `test/aggregation_test.dart` | log / measurement aggregation per granularity |
+| `test/repositories_test.dart` | every repository against a real in-memory SQLite DB |
+| `test/sample_data_test.dart` | sample data loads, is consistent and contains its edge cases |
+| `test/progress_line_chart_test.dart` | chart widget renders 1–2 series and toggles |
+
+Database tests run on desktop SQLite via `sqflite_common_ffi`. `test/helpers/test_db.dart`
+points `DatabaseHelper` at a fresh in-memory database per test
+(`DatabaseHelper.pathOverride` + `resetForTesting()`), so tests never touch a real DB file.
+
 ## Architecture
 
 Entry point is `lib/main.dart`. Repositories are injected at startup via `AppRepositories` (`lib/app_repositories.dart`), an `InheritedWidget` that makes all repos available anywhere in the tree. `SettingsRepository` is the exception — it is passed directly to `WorkoutApp` and not added to `AppRepositories` because it is a UI-level concern unrelated to workout data.
@@ -153,7 +201,9 @@ lib/
     settings/               ← SettingsScreen, DataScreen
   services/
     share_service.dart      ← static helpers for export/import/auto-backup (workout plans, exercise logs, full backup)
-  widgets/                  ← SetRowWidget, LinkRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar
+  widgets/                  ← SetRowWidget, LinkRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar,
+                               AxisScale (pure y-axis scaling used by ProgressLineChart)
+test/                       ← unit + widget tests (see Testing); helpers/test_db.dart = in-memory DB
 ```
 
 ## Data Model Summary
@@ -335,6 +385,7 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 ### Progress tab
 - **Exercises sub-tab**: searchable list of all exercises (filters by name and alias) → `ExerciseProgressScreen`.
   - Line chart with Avg Weight and Volume series; tapping a dot opens a log detail panel (edit/delete).
+  - **Dual y-axes**: each visible series is scaled independently (`AxisScale.fit`) and plotted normalized to 0..1. The first visible series labels the left axis and the second the right, each tinted in its line colour. Every scale has exactly 4 round-valued intervals, so the gridlines line up and labels never collide. Large values are abbreviated (`40k`).
   - Time filter bar: Day / Week / Month / Year / All / Custom. Filter windows are **calendar-aligned** (Week = Mon–Sun of current week, Month = 1st–last day of current month, Year = Jan 1–Dec 31). Granularity auto-adjusts for any filter with 2+ data points (raw → daily → weekly → monthly). `All` uses adaptive granularity based on the actual data span.
   - X-axis labels are granularity-aware: monthly view shows "MMM", weekly shows "W1 Jan", other views show "dd/MM".
   - When only one aggregated point exists, the dot is always shown.
@@ -361,6 +412,9 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Unit test suite**: 61 tests under `test/` (models, chart windows/granularity, axis scale, aggregation, all repositories on in-memory SQLite, sample data, chart widget). Logger is silenced in tests via `test/flutter_test_config.dart`. `aggregateLogs`/`aggregateEntries` are now public `@visibleForTesting`; `DatabaseHelper` gained `pathOverride`/`resetForTesting()`.
+- **Progress chart dual axes**: Avg Weight was squashed flat because it shared one scale with Volume (~60 vs ~40000), and the top y labels overlapped ("40517.5" over "40000.0"). Each series now has its own scale and axis; see `lib/widgets/axis_scale.dart`.
+- **Development workflow** section added to this file.
 - **Sample data for testing**: Settings → Data → Developer → Load sample data (debug builds only). See `lib/dev/sample_data.dart`.
 - **Calendar-aligned chart filter windows**: `windowStart`/`windowEnd` in `ChartFilterBar` now use calendar boundaries — Week = Mon–Sun of current week, Month = 1st–last day of current month, Year = Jan 1–Dec 31 — instead of rolling N-day windows.
 - **Granularity-aware x-axis labels**: `ProgressLineChart` now accepts a `granularity` parameter. Monthly view labels as "MMM", weekly as "W1 Jan", others as "dd/MM".

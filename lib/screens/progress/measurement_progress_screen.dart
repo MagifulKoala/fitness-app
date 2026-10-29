@@ -10,7 +10,8 @@ import '../../widgets/progress_line_chart.dart';
 
 // Aggregate measurement entries into (date, value, unit) points.
 // In raw mode returns one point per entry; otherwise collapses by period averaging values.
-List<({DateTime date, double value, String unit})> _aggregateEntries(
+@visibleForTesting
+List<({DateTime date, double value, String unit})> aggregateEntries(
     List<MeasurementEntry> entries, ChartGranularity granularity) {
   if (granularity == ChartGranularity.raw) {
     return entries.map((e) => (date: e.date, value: e.value, unit: e.unit)).toList();
@@ -156,7 +157,7 @@ class _GraphView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final points = _aggregateEntries(entries, granularity);
+    final points = aggregateEntries(entries, granularity);
     final spots = points
         .asMap()
         .entries

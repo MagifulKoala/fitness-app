@@ -13,7 +13,8 @@ import '../../widgets/set_row_widget.dart';
 
 // Aggregate exercise logs into (date, avgWeight, volume) points.
 // In raw mode returns one point per log; otherwise collapses by period.
-List<({DateTime date, double avgWeight, double volume})> _aggregateLogs(
+@visibleForTesting
+List<({DateTime date, double avgWeight, double volume})> aggregateLogs(
     List<ExerciseLog> logs, ChartGranularity granularity) {
   if (granularity == ChartGranularity.raw) {
     return logs
@@ -193,7 +194,7 @@ class _GraphViewState extends State<_GraphView> {
 
   @override
   Widget build(BuildContext context) {
-    final points = _aggregateLogs(widget.logs, widget.granularity);
+    final points = aggregateLogs(widget.logs, widget.granularity);
     final weightSpots = points
         .asMap()
         .entries

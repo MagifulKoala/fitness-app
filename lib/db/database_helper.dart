@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -20,9 +21,26 @@ class DatabaseHelper {
     return _database!;
   }
 
+  /// Tests set this (e.g. to `inMemoryDatabasePath`) to avoid path_provider
+  /// and the real DB file.
+  @visibleForTesting
+  static String? pathOverride;
+
+  /// Closes and forgets the open database so the next access starts fresh.
+  @visibleForTesting
+  static Future<void> resetForTesting() async {
+    await _database?.close();
+    _database = null;
+  }
+
   Future<Database> _initDatabase() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final path = join(dir.path, 'workout_app.db');
+    final String path;
+    if (pathOverride != null) {
+      path = pathOverride!;
+    } else {
+      final dir = await getApplicationDocumentsDirectory();
+      path = join(dir.path, 'workout_app.db');
+    }
     return openDatabase(
       path,
       version: 3,
