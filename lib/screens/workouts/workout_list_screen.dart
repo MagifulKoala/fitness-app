@@ -7,6 +7,7 @@ import '../../repositories/workout_repository.dart';
 import 'workout_detail_screen.dart';
 import 'workout_form_screen.dart';
 import 'workout_plan_detail_screen.dart';
+import 'workout_plan_form_screen.dart';
 import 'workout_session_screen.dart';
 
 class WorkoutListScreen extends StatefulWidget {
@@ -117,7 +118,7 @@ class _WorkoutListScreenState extends State<WorkoutListScreen>
             await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => WorkoutPlanDetailScreen(
+                builder: (_) => WorkoutPlanFormScreen(
                   workoutRepo: widget.workoutRepo,
                   planRepo: widget.planRepo,
                 ),

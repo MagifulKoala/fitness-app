@@ -171,6 +171,7 @@ flutter test test/repositories_test.dart
 | `test/repositories_test.dart` | every repository against a real in-memory SQLite DB |
 | `test/sample_data_test.dart` | sample data loads, is consistent and contains its edge cases |
 | `test/progress_line_chart_test.dart` | chart widget renders 1–2 series and toggles |
+| `test/plan_schedule_test.dart` | `planScheduleByDay` grouping, rest days, deleted workouts |
 
 Database tests run on desktop SQLite via `sqflite_common_ffi`. `test/helpers/test_db.dart`
 points `DatabaseHelper` at a fresh in-memory database per test
@@ -202,7 +203,8 @@ lib/
   screens/
     exercises/              ← ExerciseListScreen, ExerciseDetailScreen, ExerciseFormScreen
     workouts/               ← WorkoutListScreen, WorkoutDetailScreen, WorkoutFormScreen,
-                               WorkoutPlanDetailScreen, WorkoutSessionScreen
+                               WorkoutPlanDetailScreen (view), WorkoutPlanFormScreen (edit),
+                               WorkoutSessionScreen
     body/                   ← MeasurementListScreen, MeasurementDetailScreen
     progress/               ← ProgressScreen, ExerciseProgressScreen, MeasurementProgressScreen
     settings/               ← SettingsScreen, DataScreen
@@ -381,6 +383,11 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 
 ### Workouts tab
 - Two sub-tabs: **Workouts** (list → `WorkoutDetailScreen`) and **Plans** (list → `WorkoutPlanDetailScreen`).
+- Plans follow the same view/edit split as workouts. `WorkoutPlanDetailScreen` is **read-only**: Mon–Sun cards
+  listing each day's workouts (empty day = "Rest day", today's card outlined). Tapping a workout opens
+  `WorkoutDetailScreen` → exercises → logs. AppBar: Edit (→ `WorkoutPlanFormScreen`), Export, Delete.
+  The FAB on the Plans tab opens `WorkoutPlanFormScreen` directly to create a plan. Grouping logic is the
+  pure function `planScheduleByDay` (entries pointing to a deleted workout are skipped).
 - `WorkoutDetailScreen` lists exercises as tappable tiles that navigate to `ExerciseDetailScreen`.
 - `WorkoutFormScreen` (create/edit): exercise list sorts currently-included exercises to the top on load; order stays stable while the user toggles checkboxes. Includes a search bar filtering by name and alias.
 - `WorkoutSessionScreen`: log that a workout was performed on a given date.
@@ -413,12 +420,15 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 
 ### Share / Import (trainer ↔ client workflow)
 File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
-- **Export workout plan**: from Settings → Data → Share, or from the plan's edit screen AppBar. Produces a self-contained JSON with exercises and set templates. Recipient imports it via "Import workout plan".
+- **Export workout plan**: from Settings → Data → Share, or from the plan view screen AppBar. Produces a self-contained JSON with exercises and set templates. Recipient imports it via "Import workout plan".
 - **Export exercise logs**: Settings → Data → Share → Export logs. Period picker (Last 7 days / Last 30 days / Custom). Shares both `.json` (machine-readable) and `.txt` (human-readable grouped by date).
 - **Import workout plan**: picks a `.json` file, deduplicates exercises by name (case-insensitive), always creates new Workout and WorkoutPlan objects with fresh UUIDs.
 
 ## Recent Changes
 
+- **Plan view mode**: tapping a plan now opens a read-only `WorkoutPlanDetailScreen` (weekly schedule; tap a
+  workout to open it). The old edit screen is now `WorkoutPlanFormScreen`, reached via the Edit icon or the
+  Plans FAB. Export/Delete moved to the view screen. Sample data: PPL Saturday has two workouts.
 - **Unit test suite**: 61 tests under `test/` (models, chart windows/granularity, axis scale, aggregation, all repositories on in-memory SQLite, sample data, chart widget). Logger is silenced in tests via `test/flutter_test_config.dart`. `aggregateLogs`/`aggregateEntries` are now public `@visibleForTesting`; `DatabaseHelper` gained `pathOverride`/`resetForTesting()`.
 - **Progress chart dual axes**: Avg Weight was squashed flat because it shared one scale with Volume (~60 vs ~40000), and the top y labels overlapped ("40517.5" over "40000.0"). Each series now has its own scale and axis; see `lib/widgets/axis_scale.dart`.
 - **Development workflow** section added to this file.
