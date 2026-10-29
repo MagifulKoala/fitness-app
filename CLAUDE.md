@@ -131,6 +131,8 @@ lib/
   app_repositories.dart     ← InheritedWidget holding all data repositories
   core/
     app_logger.dart         ← shared Logger instance (package:logger)
+  dev/
+    sample_data.dart        ← SampleData.load(): wipes DB and seeds test data (debug builds only)
   models/                   ← Dart data classes (Equatable, toMap/fromMap)
   db/
     database_helper.dart    ← DatabaseHelper singleton (sqflite schema + migrations)
@@ -349,6 +351,7 @@ Use git to maintain a history of changes made. Currently the project isn't conne
   - **Share**: Export workout plan (JSON), Export exercise logs (JSON + human-readable .txt, with period picker), Import workout plan (from JSON file).
   - **Save backup**: dumps all exercises (aliases, notes, set template) and all logs per exercise to a human-readable `.txt` file at a user-chosen location via `FilePicker.saveFile` (Storage Access Framework — no extra permissions needed). On success, updates the last backup timestamp (same as auto-backup) so `DataScreen` reflects it.
   - **Manage data**: "Clear all data" — confirmation dialog, wipes all workout/exercise/measurement data, re-seeds default Weight measurement, preserves app preferences.
+  - **Developer → Load sample data** (only when `kDebugMode`, i.e. the `.dev` build; compiled out of release): confirmation dialog, then `SampleData.load` wipes all data and seeds ~14 months of history — 16 exercises, 5 workouts, 3 plans, ~1100 logs, 7 measurements. Deterministic (`Random(42)`) with dates relative to today, so every chart filter has data. Includes deliberate edge cases (never-logged exercise, bodyweight weight-0 exercises, an lbs exercise, two logs on one day, empty workout/plan, single-entry and no-entry measurements) — listed in the class doc comment. History rows are written in one batched transaction (~2 s); going through the repositories took ~56 s.
 
 ### Share / Import (trainer ↔ client workflow)
 File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
@@ -358,6 +361,7 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Sample data for testing**: Settings → Data → Developer → Load sample data (debug builds only). See `lib/dev/sample_data.dart`.
 - **Calendar-aligned chart filter windows**: `windowStart`/`windowEnd` in `ChartFilterBar` now use calendar boundaries — Week = Mon–Sun of current week, Month = 1st–last day of current month, Year = Jan 1–Dec 31 — instead of rolling N-day windows.
 - **Granularity-aware x-axis labels**: `ProgressLineChart` now accepts a `granularity` parameter. Monthly view labels as "MMM", weekly as "W1 Jan", others as "dd/MM".
 - **Adaptive granularity for all filters**: Both progress screens apply adaptive granularity (based on the data span) whenever there are 2+ filtered data points, not just for the "All" filter.

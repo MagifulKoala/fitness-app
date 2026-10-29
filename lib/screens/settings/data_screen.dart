@@ -1,9 +1,11 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../app_repositories.dart';
 import '../../core/app_logger.dart';
 import '../../db/database_helper.dart';
+import '../../dev/sample_data.dart';
 import '../../models/workout_plan.dart';
 import '../../repositories/exercise_log_repository.dart';
 import '../../repositories/exercise_repository.dart';
@@ -32,6 +34,7 @@ class _DataScreenState extends State<DataScreen> {
   bool _exportingPlan = false;
   bool _savingBackup = false;
   bool _runningAutoBackup = false;
+  bool _loadingSample = false;
 
   String? _backupFolderPath;
   DateTime? _lastBackupTime;
@@ -144,6 +147,48 @@ class _DataScreenState extends State<DataScreen> {
           );
         }
       }
+    }
+  }
+
+  Future<void> _loadSampleData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Load sample data?'),
+        content: const Text(
+            'This replaces ALL current data with generated test data.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Load'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _loadingSample = true);
+    try {
+      await SampleData.load(AppRepositories.of(context));
+      widget.onDataCleared();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sample data loaded.')),
+        );
+      }
+    } catch (e, st) {
+      log.e('[DataScreen] loading sample data failed', error: e, stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load sample data.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingSample = false);
     }
   }
 
@@ -301,6 +346,21 @@ class _DataScreenState extends State<DataScreen> {
             subtitle: const Text('Save all exercises and logs as a text file'),
             onTap: _savingBackup ? null : _saveBackup,
           ),
+          // Debug builds only: compiled out of release, so the real app
+          // never shows this.
+          if (kDebugMode) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text('Developer', style: _sectionLabelStyle(context)),
+            ),
+            ListTile(
+              leading: _loadingIcon(const Icon(Icons.science_outlined), _loadingSample),
+              title: const Text('Load sample data'),
+              subtitle: const Text('Replace all data with generated test data'),
+              onTap: _loadingSample ? null : _loadSampleData,
+            ),
+          ],
           const Divider(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
