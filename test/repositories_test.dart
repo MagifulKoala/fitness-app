@@ -90,11 +90,42 @@ void main() {
       expect(updated.links, isEmpty);
     });
 
-    test('delete removes the exercise', () async {
-      final repo = testRepositories().exerciseRepo;
-      await repo.insert(_exercise('e', 'Curl'));
+    test('delete removes the exercise, its logs and workout slots, '
+        'and leaves other exercises alone', () async {
+      final repos = testRepositories();
+      final repo = repos.exerciseRepo;
+      await repo.insert(_exercise('e', 'Curl',
+          sets: const [SetChild(id: 'a', reps: 8, weight: 10, unit: 'kg')],
+          links: const [ExerciseLink(id: 'l', label: 'x', url: 'https://x')]));
+      await repo.insert(_exercise('keep', 'Squat',
+          sets: const [SetChild(id: 'b', reps: 5, weight: 100, unit: 'kg')]));
+      await repos.exerciseLogRepo.insert(_log('l1', 'e', DateTime(2026, 1, 1)));
+      await repos.exerciseLogRepo.insert(_log('l2', 'e', DateTime(2026, 1, 2)));
+      await repos.exerciseLogRepo.insert(_log('k1', 'keep', DateTime(2026, 1, 1)));
+      await repos.workoutRepo.insert(const Workout(
+          id: 'w', name: 'Arms', exerciseIds: ['e', 'keep']));
+
       await repo.delete('e');
+
       expect(await repo.getById('e'), isNull);
+      expect(await repos.exerciseLogRepo.getByExerciseId('e'), isEmpty);
+      expect((await repos.workoutRepo.getById('w'))!.exerciseIds, ['keep']);
+
+      // No orphaned rows anywhere.
+      final db = await DatabaseHelper.instance.database;
+      Future<int> count(String sql) async =>
+          (await db.rawQuery(sql)).first.values.first as int;
+      expect(await count("SELECT COUNT(*) FROM exercise_log_sets "
+          "WHERE log_id IN ('l1','l2')"), 0);
+      expect(await count('SELECT COUNT(*) FROM set_children WHERE '
+          'set_template_id NOT IN (SELECT id FROM set_templates)'), 0);
+      expect(await count("SELECT COUNT(*) FROM exercise_links "
+          "WHERE exercise_id = 'e'"), 0);
+
+      // The other exercise is untouched.
+      final kept = (await repo.getById('keep'))!;
+      expect(kept.setTemplate.sets, hasLength(1));
+      expect(await repos.exerciseLogRepo.getByExerciseId('keep'), hasLength(1));
     });
   });
 

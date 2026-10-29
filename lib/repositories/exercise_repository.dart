@@ -105,24 +105,31 @@ class ExerciseRepository {
     }
   }
 
+  /// Deletes the exercise together with everything that references it: its
+  /// logs (and their sets) and its slots in workouts. Runs in one transaction
+  /// so a failure cannot leave orphaned rows behind.
   Future<void> delete(String id) async {
     log.d('[ExerciseRepo] delete: $id');
     final db = await _db.database;
-    await db.delete('exercise_links', where: 'exercise_id = ?', whereArgs: [id]);
-    final templates = await db.query(
-      'set_templates',
-      where: 'exercise_id = ?',
-      whereArgs: [id],
-    );
-    for (final t in templates) {
-      await db.delete(
-        'set_children',
-        where: 'set_template_id = ?',
-        whereArgs: [t['id']],
+    await db.transaction((txn) async {
+      await txn.delete(
+        'exercise_log_sets',
+        where: 'log_id IN (SELECT id FROM exercise_logs WHERE exercise_id = ?)',
+        whereArgs: [id],
       );
-    }
-    await db.delete('set_templates', where: 'exercise_id = ?', whereArgs: [id]);
-    await db.delete('exercises', where: 'id = ?', whereArgs: [id]);
+      await txn.delete('exercise_logs', where: 'exercise_id = ?', whereArgs: [id]);
+      await txn.delete('workout_exercises',
+          where: 'exercise_id = ?', whereArgs: [id]);
+      await txn.delete('exercise_links', where: 'exercise_id = ?', whereArgs: [id]);
+      await txn.delete(
+        'set_children',
+        where: 'set_template_id IN '
+            '(SELECT id FROM set_templates WHERE exercise_id = ?)',
+        whereArgs: [id],
+      );
+      await txn.delete('set_templates', where: 'exercise_id = ?', whereArgs: [id]);
+      await txn.delete('exercises', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<Exercise> _hydrate(Database db, Map<String, dynamic> row) async {
