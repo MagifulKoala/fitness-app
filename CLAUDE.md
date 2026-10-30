@@ -158,7 +158,7 @@ instead, since screenshotting a mirror window is lossy.
 ## Testing
 
 ```bash
-flutter test                         # everything (~seconds, no device needed)
+flutter test                         # everything: 75 tests, ~2 s, no device needed
 flutter test test/repositories_test.dart
 ```
 
@@ -168,7 +168,7 @@ flutter test test/repositories_test.dart
 | `test/chart_filter_test.dart` | calendar windows, granularity, period keys, dots |
 | `test/axis_scale_test.dart` | chart y-axis scaling and tick labels |
 | `test/aggregation_test.dart` | log / measurement aggregation per granularity |
-| `test/repositories_test.dart` | every repository against a real in-memory SQLite DB |
+| `test/repositories_test.dart` | every repository against a real in-memory SQLite DB; exercise alternatives (symmetry, non-transitivity, cascades); v3→v4 upgrade of a real DB file; workout reorder |
 | `test/sample_data_test.dart` | sample data loads, is consistent and contains its edge cases |
 | `test/progress_line_chart_test.dart` | chart widget renders 1–2 series and toggles |
 | `test/plan_schedule_test.dart` | `planScheduleByDay` grouping, rest days, deleted workouts |
@@ -400,12 +400,17 @@ Every `FloatingActionButton` in the app sets `heroTag: null`. The main shell use
 
 ## Commits and Version Control
 
-Use git to maintain a history of changes made. Currently the project isn't connected to a remote repo so pushing isn't necessary. `git add .` your changes and then `git commit -m ''` with a meaningful commit message that briefly describes the changes made.
+Use git to maintain a history of changes made. `git add .` your changes and then `git commit -m ''` with a meaningful commit message that briefly describes the changes made.
+
+The repo has a GitHub remote (`origin` → `github.com/MagifulKoala/fitness-app`, branch `master`).
+Commit locally; the user pushes. Don't push unless asked.
+
+`claude-context/` is git-ignored on purpose, so session summaries stay local to this machine.
 
 ## Feature Overview
 
 ### Exercises tab
-- List of all exercises; tap to open `ExerciseDetailScreen` (shows links, set template, log history).
+- List of all exercises; tap to open `ExerciseDetailScreen` (shows aliases, notes, links, set template, alternatives; Log FAB).
 - FAB opens `ExerciseFormScreen` (create/edit name, aliases, notes, links, set template).
 - From `ExerciseDetailScreen`, the Log FAB opens a log sheet to record a session.
 - **Alternatives** (bottom of `ExerciseDetailScreen`): exercises to swap in when equipment is busy. Tap one
