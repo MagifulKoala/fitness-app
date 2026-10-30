@@ -202,7 +202,8 @@ lib/
     measurement_repository.dart
     settings_repository.dart  ← app preferences (theme mode, backup folder/timestamp); excluded from clearAll
   screens/
-    exercises/              ← ExerciseListScreen, ExerciseDetailScreen, ExerciseFormScreen
+    exercises/              ← ExerciseListScreen, ExerciseDetailScreen, ExerciseFormScreen,
+                               AlternativesPickerScreen
     workouts/               ← WorkoutListScreen, WorkoutDetailScreen, WorkoutFormScreen,
                                WorkoutPlanDetailScreen (view), WorkoutPlanFormScreen (edit),
                                WorkoutSessionScreen
@@ -220,6 +221,10 @@ test/                       ← unit + widget tests (see Testing); helpers/test_
 ## Data Model Summary
 
 - **Exercise** — name, aliases (comma-separated in DB), notes, owns a **SetTemplate** (list of **SetChild**: reps, weight, unit), and a list of **ExerciseLink** (label, url) stored in a separate table
+- **Exercise alternatives** — symmetric, non-transitive links between two exercises (`exercise_alternatives`,
+  one row per pair with the smaller id in `exercise_a`, enforced by a CHECK). Not a field on `Exercise`;
+  read/write via `ExerciseRepository.getAlternatives / addAlternative / removeAlternative / setAlternatives`.
+  Deleting an exercise removes its links.
 - **ExerciseLog** — snapshot of set data at log time (independent of future template edits)
 - **Workout** — name, notes, ordered list of exercise IDs
 - **WorkoutPlan** — name, list of **WorkoutPlanEntry** (workoutId + dayOfWeek 1–7)
@@ -270,7 +275,7 @@ adb logcat flutter:E *:S            # errors only
 ## Database Notes
 
 - DB file: `workout_app.db` in the app documents directory
-- **Schema version: 3** — bump version and add a new `if (oldVersion < N)` block in `_onUpgrade` in `lib/db/database_helper.dart` for every schema change. Never edit earlier migration blocks.
+- **Schema version: 4** — bump version and add a new `if (oldVersion < N)` block in `_onUpgrade` in `lib/db/database_helper.dart` for every schema change. Never edit earlier migration blocks.
 - On first launch, a default **"Weight"** measurement is seeded automatically
 - Dates stored as ISO 8601 strings; displayed as dd/MM/yy via `intl`
 - `app_settings` table is intentionally excluded from `clearAll()` so user preferences (e.g. dark mode) survive a data wipe
@@ -281,6 +286,7 @@ adb logcat flutter:E *:S            # errors only
 | 1 | Initial schema (exercises, workouts, plans, sessions, measurements) |
 | 2 | Added `app_settings` key-value table for app preferences |
 | 3 | Added `exercise_links` table (id, exercise_id, url, label, sort_order) |
+| 4 | Added `exercise_alternatives` table (exercise_a, exercise_b; PK pair, CHECK a < b) |
 
 ## Protecting Real Data on a Daily-Driver Phone
 
@@ -309,8 +315,8 @@ from the original machine to the new one **before building**.
 `ShareService.saveFullBackup` and `autoBackupToFolder` write **human-readable `.txt`**,
 and `exportLogs` writes JSON — but `importWorkoutPlan` is the **only** import function
 in the codebase. There is no importer for logs, measurements, or a full backup.
-`saveFullBackup` also covers only exercises and logs — **measurements are not
-included in any backup at all**.
+`saveFullBackup` also covers only exercises (incl. their alternatives) and logs —
+**measurements are not included in any backup at all**.
 
 Treat the `.txt`/JSON exports as an archive, not a restore. The only faithful backup
 is the raw SQLite file (`workout_app.db` in the app documents directory).
@@ -402,6 +408,11 @@ Use git to maintain a history of changes made. Currently the project isn't conne
 - List of all exercises; tap to open `ExerciseDetailScreen` (shows links, set template, log history).
 - FAB opens `ExerciseFormScreen` (create/edit name, aliases, notes, links, set template).
 - From `ExerciseDetailScreen`, the Log FAB opens a log sheet to record a session.
+- **Alternatives** (bottom of `ExerciseDetailScreen`): exercises to swap in when equipment is busy. Tap one
+  to open its detail; swipe left to remove (Undo snackbar, cleared when leaving the screen); Add/Edit opens
+  `AlternativesPickerScreen` (searchable checklist, current alternatives first). Linking A↔B shows each on
+  the other's list; links are not transitive. The detail list has extra bottom padding so the Log FAB
+  never covers the last alternative.
 - **Links**: each exercise stores an ordered list of `ExerciseLink` (label + URL). Displayed as tappable tiles in the detail screen (opens system browser via `url_launcher`). Edited in the form screen with the same add/remove pattern as sets. URLs without a scheme get `https://` prepended on save.
 
 ### Workouts tab
@@ -452,6 +463,9 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Exercise alternatives** (schema v4): symmetric links between exercises, shown and edited at the bottom
+  of the exercise detail screen. Included in the text backups; not in workout-plan exports. Sample data
+  has a hub (Lat Pulldown ↔ Pull-up, Barbell Row) that is deliberately non-transitive.
 - **Reorder exercises in a workout**: drag handle (≡) on each row of `WorkoutDetailScreen`; order
   persists immediately. `WorkoutRepository.update` is now transactional.
 - **System nav bar follows the theme**: transparent, no grey scrim, icon colour per light/dark mode.

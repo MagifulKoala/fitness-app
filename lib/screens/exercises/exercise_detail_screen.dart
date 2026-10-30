@@ -10,6 +10,7 @@ import '../../repositories/exercise_log_repository.dart';
 import '../../repositories/exercise_repository.dart';
 import '../../widgets/date_picker_field.dart';
 import '../../widgets/set_row_widget.dart';
+import 'alternatives_picker_screen.dart';
 import 'exercise_form_screen.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
@@ -29,11 +30,75 @@ class ExerciseDetailScreen extends StatefulWidget {
 class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   final _uuid = const Uuid();
   late Exercise _exercise;
+  List<Exercise> _alternatives = [];
+  // Set while this screen's "Removed … Undo" snackbar may be showing.
+  ScaffoldMessengerState? _undoMessenger;
 
   @override
   void initState() {
     super.initState();
     _exercise = widget.exercise;
+    _loadAlternatives();
+  }
+
+  @override
+  void dispose() {
+    // Snackbars are app-wide; don't let Undo outlive the screen it belongs to.
+    _undoMessenger?.hideCurrentSnackBar();
+    super.dispose();
+  }
+
+  Future<void> _loadAlternatives() async {
+    final alts = await widget.exerciseRepo.getAlternatives(_exercise.id);
+    if (mounted) setState(() => _alternatives = alts);
+  }
+
+  Future<void> _editAlternatives() async {
+    final selected = await Navigator.push<Set<String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AlternativesPickerScreen(
+          exercise: _exercise,
+          initialSelection: {for (final a in _alternatives) a.id},
+          exerciseRepo: widget.exerciseRepo,
+        ),
+      ),
+    );
+    if (selected == null) return;
+    await widget.exerciseRepo.setAlternatives(_exercise.id, selected);
+    await _loadAlternatives();
+  }
+
+  Future<void> _removeAlternative(Exercise alt) async {
+    setState(() => _alternatives.remove(alt));
+    await widget.exerciseRepo.removeAlternative(_exercise.id, alt.id);
+    if (!mounted) return;
+    _undoMessenger = ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('Removed ${alt.name}'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await widget.exerciseRepo.addAlternative(_exercise.id, alt.id);
+            await _loadAlternatives();
+          },
+        ),
+      ));
+  }
+
+  Future<void> _openAlternative(Exercise alt) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExerciseDetailScreen(
+          exercise: alt,
+          exerciseRepo: widget.exerciseRepo,
+        ),
+      ),
+    );
+    // Links may have been edited from the other exercise's side.
+    await _refresh();
   }
 
   Future<void> _launchUrl(BuildContext context, String url) async {
@@ -53,6 +118,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
     if (updated != null && mounted) {
       setState(() => _exercise = updated);
     }
+    await _loadAlternatives();
   }
 
   void _showLogDialog(BuildContext context, ExerciseLogRepository logRepo) {
@@ -216,7 +282,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
-            16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
+            16, 16, 16, 88 + MediaQuery.paddingOf(context).bottom),
         children: [
           if (_exercise.aliases.isNotEmpty) ...[
             Text('Aliases',
@@ -269,6 +335,58 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
             'Volume: ${_exercise.setTemplate.volume.toStringAsFixed(1)} (adimensional)',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Alternatives',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              TextButton.icon(
+                icon: Icon(_alternatives.isEmpty ? Icons.add : Icons.edit,
+                    size: 18),
+                label: Text(_alternatives.isEmpty ? 'Add' : 'Edit'),
+                onPressed: _editAlternatives,
+              ),
+            ],
+          ),
+          if (_alternatives.isEmpty)
+            Text(
+              'Exercises you can swap in if the equipment is busy.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            )
+          else ...[
+            Text(
+              'Tap to open \u00b7 swipe left to remove',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            for (final alt in _alternatives)
+              Dismissible(
+                key: ValueKey('alt-${alt.id}'),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 16),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Icon(Icons.link_off,
+                      color: Theme.of(context).colorScheme.onErrorContainer),
+                ),
+                onDismissed: (_) => _removeAlternative(alt),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.swap_horiz),
+                  title: Text(alt.name),
+                  subtitle: alt.aliases.isEmpty
+                      ? null
+                      : Text(alt.aliases.join(', '),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _openAlternative(alt),
+                ),
+              ),
+          ],
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

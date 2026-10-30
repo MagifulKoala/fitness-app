@@ -228,7 +228,9 @@ class ShareService {
         logsByExercise.putIfAbsent(l.exerciseId, () => []).add(l);
       }
 
-      final text = _buildBackupText(exercises, logsByExercise);
+      final alternatives =
+          _alternativeNames(exercises, await exerciseRepo.getAllAlternativePairs());
+      final text = _buildBackupText(exercises, logsByExercise, alternatives);
       final now = DateTime.now();
       final fileName = 'workout_backup_${_isoDate(now)}.txt';
 
@@ -259,9 +261,28 @@ class ShareService {
     }
   }
 
+  /// exercise id -> sorted names of its alternatives (links are symmetric).
+  static Map<String, List<String>> _alternativeNames(
+    List<Exercise> exercises,
+    List<(String, String)> pairs,
+  ) {
+    final names = {for (final e in exercises) e.id: e.name};
+    final result = <String, List<String>>{};
+    for (final (a, b) in pairs) {
+      if (names[a] == null || names[b] == null) continue;
+      result.putIfAbsent(a, () => []).add(names[b]!);
+      result.putIfAbsent(b, () => []).add(names[a]!);
+    }
+    for (final list in result.values) {
+      list.sort();
+    }
+    return result;
+  }
+
   static String _buildBackupText(
     List<Exercise> exercises,
     Map<String, List<ExerciseLog>> logsByExercise,
+    Map<String, List<String>> alternatives,
   ) {
     final buf = StringBuffer();
     final sep = '─' * 45;
@@ -286,6 +307,10 @@ class ShareService {
       }
       if (ex.notes != null && ex.notes!.isNotEmpty) {
         buf.writeln('   Notes: ${ex.notes}');
+      }
+      final alts = alternatives[ex.id];
+      if (alts != null && alts.isNotEmpty) {
+        buf.writeln('   Alternatives: ${alts.join(', ')}');
       }
       final sets = ex.setTemplate.sets;
       if (sets.isNotEmpty) {
@@ -352,7 +377,9 @@ class ShareService {
       for (final l in allLogs) {
         logsByExercise.putIfAbsent(l.exerciseId, () => []).add(l);
       }
-      final text = _buildBackupText(exercises, logsByExercise);
+      final alternatives =
+          _alternativeNames(exercises, await exerciseRepo.getAllAlternativePairs());
+      final text = _buildBackupText(exercises, logsByExercise, alternatives);
       final file = File('$folderPath/workout_backup.txt');
       await file.writeAsString(text);
       await settingsRepo.setBackupLastTimestamp(DateTime.now());

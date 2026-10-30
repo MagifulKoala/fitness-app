@@ -35,6 +35,9 @@ import '../models/workout_session.dart';
 ///   is a rest day.
 /// - Thigh: a single entry. Neck: no entries.
 /// - History spans ~14 months, so All covers more than one Year window.
+/// - Alternatives: Lat Pulldown links to both Pull-up and Barbell Row, which
+///   are NOT linked to each other (links are not transitive). Most exercises,
+///   e.g. Farmer's Carry, have none.
 class SampleData {
   static const _uuid = Uuid();
   static const _historyDays = 420;
@@ -182,6 +185,17 @@ class SampleData {
     );
     for (final w in [push, pull, legs, fullBody, mobility]) {
       await repos.workoutRepo.insert(w);
+    }
+
+    // ── Alternatives ─────────────────────────────────────────────────────────
+    for (final (a, b) in [
+      ('Squat', 'Leg Press'),
+      ('Bench Press', 'Incline Dumbbell Press'),
+      ('Deadlift', 'Romanian Deadlift'),
+      ('Lat Pulldown', 'Pull-up'),
+      ('Lat Pulldown', 'Barbell Row'),
+    ]) {
+      await repos.exerciseRepo.addAlternative(ex[a]!.id, ex[b]!.id);
     }
 
     // ── Plans ────────────────────────────────────────────────────────────────

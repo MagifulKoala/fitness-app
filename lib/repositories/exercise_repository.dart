@@ -121,6 +121,8 @@ class ExerciseRepository {
       await txn.delete('workout_exercises',
           where: 'exercise_id = ?', whereArgs: [id]);
       await txn.delete('exercise_links', where: 'exercise_id = ?', whereArgs: [id]);
+      await txn.delete('exercise_alternatives',
+          where: 'exercise_a = ? OR exercise_b = ?', whereArgs: [id, id]);
       await txn.delete(
         'set_children',
         where: 'set_template_id IN '
@@ -129,6 +131,75 @@ class ExerciseRepository {
       );
       await txn.delete('set_templates', where: 'exercise_id = ?', whereArgs: [id]);
       await txn.delete('exercises', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  // ── Alternatives ──────────────────────────────────────────────────────────
+  // A link between two exercises is one row with the smaller id in
+  // exercise_a, so "B is an alternative of A" and "A is an alternative of B"
+  // are the same row and can never disagree. Links are not transitive.
+
+  static Map<String, String> _pair(String a, String b) => a.compareTo(b) < 0
+      ? {'exercise_a': a, 'exercise_b': b}
+      : {'exercise_a': b, 'exercise_b': a};
+
+  /// Exercises linked to [exerciseId] as alternatives, sorted by name.
+  Future<List<Exercise>> getAlternatives(String exerciseId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT e.* FROM exercises e
+      JOIN exercise_alternatives x
+        ON (x.exercise_a = ? AND e.id = x.exercise_b)
+        OR (x.exercise_b = ? AND e.id = x.exercise_a)
+      ORDER BY e.name ASC
+    ''', [exerciseId, exerciseId]);
+    return [for (final row in rows) await _hydrate(db, row)];
+  }
+
+  /// Every alternative link as an (a, b) id pair. Used by backups.
+  Future<List<(String, String)>> getAllAlternativePairs() async {
+    final db = await _db.database;
+    final rows = await db.query('exercise_alternatives');
+    return [
+      for (final r in rows)
+        (r['exercise_a'] as String, r['exercise_b'] as String)
+    ];
+  }
+
+  /// Links [a] and [b] both ways. Linking twice, or an exercise to itself,
+  /// is a no-op.
+  Future<void> addAlternative(String a, String b) async {
+    if (a == b) return;
+    log.d('[ExerciseRepo] addAlternative: $a <-> $b');
+    final db = await _db.database;
+    await db.insert('exercise_alternatives', _pair(a, b),
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> removeAlternative(String a, String b) async {
+    log.d('[ExerciseRepo] removeAlternative: $a <-> $b');
+    final db = await _db.database;
+    final p = _pair(a, b);
+    await db.delete('exercise_alternatives',
+        where: 'exercise_a = ? AND exercise_b = ?',
+        whereArgs: [p['exercise_a'], p['exercise_b']]);
+  }
+
+  /// Makes [alternativeIds] exactly the alternatives of [exerciseId]: links
+  /// not in the list are removed (from both sides), new ones are added.
+  Future<void> setAlternatives(
+      String exerciseId, Iterable<String> alternativeIds) async {
+    log.d('[ExerciseRepo] setAlternatives: $exerciseId -> $alternativeIds');
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.delete('exercise_alternatives',
+          where: 'exercise_a = ? OR exercise_b = ?',
+          whereArgs: [exerciseId, exerciseId]);
+      for (final other in alternativeIds) {
+        if (other == exerciseId) continue;
+        await txn.insert('exercise_alternatives', _pair(exerciseId, other),
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
     });
   }
 

@@ -29,6 +29,20 @@ void main() {
     );
     expect(byName['Dumbbell Curl']!.setTemplate.sets.first.unit, 'lbs');
 
+    // Alternatives: symmetric, a hub with two links, not transitive.
+    Future<List<String>> alts(String name) async => [
+      for (final e in await repos.exerciseRepo.getAlternatives(
+        byName[name]!.id,
+      ))
+        e.name,
+    ];
+    expect(await alts('Lat Pulldown'), ['Barbell Row', 'Pull-up']);
+    expect(await alts('Pull-up'), ['Lat Pulldown'], reason: 'symmetric');
+    expect(await alts('Barbell Row'), [
+      'Lat Pulldown',
+    ], reason: 'not transitive: Row is not linked to Pull-up');
+    expect(await alts("Farmer's Carry"), isEmpty);
+
     // Logs
     final logs = await repos.exerciseLogRepo.getAll();
     expect(logs.length, greaterThan(500));

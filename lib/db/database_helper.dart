@@ -43,7 +43,7 @@ class DatabaseHelper {
     }
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -170,6 +170,17 @@ class DatabaseHelper {
       )
     ''');
 
+    // Each alternative pair is stored once, smallest id first, so the link is
+    // symmetric by construction (see ExerciseRepository.addAlternative).
+    await db.execute('''
+      CREATE TABLE exercise_alternatives (
+        exercise_a TEXT NOT NULL,
+        exercise_b TEXT NOT NULL,
+        PRIMARY KEY (exercise_a, exercise_b),
+        CHECK (exercise_a < exercise_b)
+      )
+    ''');
+
     // Seed default "Weight" measurement
     final weightId = const Uuid().v4();
     await db.insert('measurements', {'id': weightId, 'name': 'Weight'});
@@ -193,6 +204,7 @@ class DatabaseHelper {
         'measurement_entries',
         'measurements',
         'exercise_links',
+        'exercise_alternatives',
       ]) {
         await txn.delete(table);
       }
@@ -223,6 +235,17 @@ class DatabaseHelper {
           url         TEXT    NOT NULL,
           label       TEXT    NOT NULL DEFAULT '',
           sort_order  INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+    }
+    if (oldVersion < 4) {
+      // v4: symmetric exercise alternatives (e.g. Squat <-> Smith Machine Squat)
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS exercise_alternatives (
+          exercise_a TEXT NOT NULL,
+          exercise_b TEXT NOT NULL,
+          PRIMARY KEY (exercise_a, exercise_b),
+          CHECK (exercise_a < exercise_b)
         )
       ''');
     }
