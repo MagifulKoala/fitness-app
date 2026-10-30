@@ -196,6 +196,20 @@ void main() {
       expect(await repo.getAll(), isEmpty);
     });
 
+    test('reordering exercises persists the new order', () async {
+      final repo = testRepositories().workoutRepo;
+      const w =
+          Workout(id: 'w', name: 'Legs', exerciseIds: ['a', 'b', 'c', 'd']);
+      await repo.insert(w);
+
+      // Drag 'd' to the top, then 'a' (now 2nd) to the bottom.
+      await repo.update(w.copyWith(exerciseIds: ['d', 'a', 'b', 'c']));
+      await repo.update(w.copyWith(exerciseIds: ['d', 'b', 'c', 'a']));
+
+      expect((await repo.getById('w'))!.exerciseIds, ['d', 'b', 'c', 'a']);
+      expect((await repo.getAll()).single.exerciseIds, ['d', 'b', 'c', 'a']);
+    });
+
     test('plan keeps entries; delete removes them', () async {
       final repo = testRepositories().planRepo;
       await repo.insert(const WorkoutPlan(id: 'p', name: 'PPL', entries: [

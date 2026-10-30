@@ -376,6 +376,10 @@ make room for it, or it hides under the buttons:
   `MediaQuery.paddingOf(context).bottom` to the bottom padding (`ListView` with no `padding`
   handles it already).
 - **Bottom sheets** add `MediaQuery.viewPaddingOf(context).bottom` to their padding.
+- **Bar colour**: `MaterialApp.builder` in `main.dart` wraps the app in an
+  `AnnotatedRegion<SystemUiOverlayStyle>` that makes the bar transparent, turns off Android's
+  contrast scrim (it was a light-grey strip in dark mode) and picks icon brightness from the
+  theme. The screen's own bottom colour (tab bar, `BottomActionBar`, background) shows through.
 - **Test UI with 3-button nav** on the emulator:
   `adb shell cmd overlay enable com.android.internal.systemui.navbar.threebutton`
   (revert with `...navbar.gestural`).
@@ -408,6 +412,9 @@ Use git to maintain a history of changes made. Currently the project isn't conne
   The FAB on the Plans tab opens `WorkoutPlanFormScreen` directly to create a plan. Grouping logic is the
   pure function `planScheduleByDay` (entries pointing to a deleted workout are skipped).
 - `WorkoutDetailScreen` lists exercises as tappable tiles that navigate to `ExerciseDetailScreen`.
+  **Drag to reorder**: drag the ≡ handle (or long-press anywhere on a row) in a `ReorderableListView`
+  (`onReorderItem`). The new order is saved immediately via `WorkoutRepository.update`, which rewrites
+  `workout_exercises.sort_order` inside one transaction.
 - `WorkoutFormScreen` (create/edit): exercise list sorts currently-included exercises to the top on load; order stays stable while the user toggles checkboxes. Includes a search bar filtering by name and alias.
 - `WorkoutSessionScreen`: log that a workout was performed on a given date.
 
@@ -445,6 +452,9 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 
 ## Recent Changes
 
+- **Reorder exercises in a workout**: drag handle (≡) on each row of `WorkoutDetailScreen`; order
+  persists immediately. `WorkoutRepository.update` is now transactional.
+- **System nav bar follows the theme**: transparent, no grey scrim, icon colour per light/dark mode.
 - **Save buttons hidden by the 3-button nav bar (fix)**: on phones using 3-button navigation the
   Save/Create button at the end of the workout, exercise and plan forms sat under the system bar.
   It is now pinned in a `BottomActionBar`, always visible. Workout/exercise detail lists and the

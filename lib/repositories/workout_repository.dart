@@ -40,24 +40,28 @@ class WorkoutRepository {
   Future<void> update(Workout workout) async {
     log.d('[WorkoutRepo] update: ${workout.name}');
     final db = await _db.database;
-    await db.update(
-      'workouts',
-      workout.toMap(),
-      where: 'id = ?',
-      whereArgs: [workout.id],
-    );
-    await db.delete(
-      'workout_exercises',
-      where: 'workout_id = ?',
-      whereArgs: [workout.id],
-    );
-    for (var i = 0; i < workout.exerciseIds.length; i++) {
-      await db.insert('workout_exercises', {
-        'workout_id': workout.id,
-        'exercise_id': workout.exerciseIds[i],
-        'sort_order': i,
-      });
-    }
+    // One transaction: a failure mid-way can't leave the exercise list
+    // half-written (this runs on every drag-to-reorder).
+    await db.transaction((txn) async {
+      await txn.update(
+        'workouts',
+        workout.toMap(),
+        where: 'id = ?',
+        whereArgs: [workout.id],
+      );
+      await txn.delete(
+        'workout_exercises',
+        where: 'workout_id = ?',
+        whereArgs: [workout.id],
+      );
+      for (var i = 0; i < workout.exerciseIds.length; i++) {
+        await txn.insert('workout_exercises', {
+          'workout_id': workout.id,
+          'exercise_id': workout.exerciseIds[i],
+          'sort_order': i,
+        });
+      }
+    });
   }
 
   Future<void> delete(String id) async {

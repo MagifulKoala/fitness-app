@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'app_repositories.dart';
 import 'db/database_helper.dart';
@@ -116,6 +117,23 @@ class _WorkoutAppState extends State<WorkoutApp> {
         useMaterial3: true,
       ),
       themeMode: _themeMode,
+      // Android draws the system nav bar over the app (edge-to-edge). By default
+      // it gets a light contrast scrim, a grey strip that clashes in dark mode.
+      // Drop the scrim so the screen's own colour shows through, and pick icon
+      // colours that are readable on the current theme.
+      builder: (context, child) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarContrastEnforced: false,
+            systemNavigationBarIconBrightness:
+                dark ? Brightness.light : Brightness.dark,
+          ),
+          child: child!,
+        );
+      },
       home: _MainShell(
         settingsRepo: widget.settingsRepo,
         themeMode: _themeMode,
