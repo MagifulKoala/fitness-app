@@ -2,10 +2,14 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import '../../app_repositories.dart';
+import '../../core/exercise_stats.dart';
 import '../../models/exercise.dart';
 import '../../models/exercise_log.dart';
 import '../../models/set_child.dart';
+import '../../models/workout.dart';
 import '../../repositories/exercise_log_repository.dart';
+import '../../repositories/workout_repository.dart';
 import '../../widgets/chart_filter_bar.dart';
 import '../../widgets/date_picker_field.dart';
 import '../../widgets/progress_line_chart.dart';
@@ -40,10 +44,15 @@ class ExerciseProgressScreen extends StatefulWidget {
   final Exercise exercise;
   final ExerciseLogRepository logRepo;
 
+  /// Workout selected when the screen opens: All workouts from the Progress
+  /// tab, a specific workout from the stats card's "See progress".
+  final WorkoutFilter initialWorkoutFilter;
+
   const ExerciseProgressScreen({
     super.key,
     required this.exercise,
     required this.logRepo,
+    this.initialWorkoutFilter = WorkoutFilter.all,
   });
 
   @override
@@ -53,34 +62,52 @@ class ExerciseProgressScreen extends StatefulWidget {
 
 class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
   List<ExerciseLog> _logs = [];
+  Map<String, Workout> _workoutsById = {};
+  WorkoutRepository? _workoutRepo;
   bool _loading = true;
   ChartFilter _filter = ChartFilter.all;
+  late WorkoutFilter _workoutFilter;
   DateTime _customFrom = DateTime.now().subtract(const Duration(days: 29));
   DateTime _customTo = DateTime.now();
 
   @override
   void initState() {
     super.initState();
+    _workoutFilter = widget.initialWorkoutFilter;
     final now = DateTime.now();
     _customTo = DateTime(now.year, now.month, now.day);
     _customFrom = _customTo.subtract(const Duration(days: 29));
-    _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_workoutRepo == null) {
+      _workoutRepo = AppRepositories.of(context).workoutRepo;
+      _load();
+    }
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     final logs = await widget.logRepo.getByExerciseId(widget.exercise.id);
+    final workouts = await _workoutRepo!.getAll();
+    if (!mounted) return;
     setState(() {
       _logs = logs.reversed.toList(); // ASC: oldest first
+      _workoutsById = {for (final w in workouts) w.id: w};
       _loading = false;
     });
   }
 
+  String? _workoutLabel(ExerciseLog l) => workoutLabel(l, _workoutsById);
+
   List<ExerciseLog> get _filteredLogs {
-    if (_filter == ChartFilter.all) return _logs;
+    final byWorkout = _logs.where(_workoutFilter.matches).toList();
+    if (_filter == ChartFilter.all) return byWorkout;
     final start = windowStart(_filter, _customFrom);
     final end = windowEnd(_filter, _customTo);
-    return _logs.where((l) {
+    return byWorkout.where((l) {
       final d = DateTime(l.date.year, l.date.month, l.date.day);
       return !d.isBefore(start) && !d.isAfter(end);
     }).toList();
@@ -112,6 +139,7 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
+                  if (_logs.isNotEmpty) _buildWorkoutDropdown(),
                   ChartFilterBar(
                     selected: _filter,
                     customFrom: _customFrom,
@@ -135,11 +163,16 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
                                     logRepo: widget.logRepo,
                                     onChanged: _load,
                                     filter: _filter,
+                                    workoutFilter: _workoutFilter,
+                                    workoutLabel: _workoutLabel,
+                                    workoutsById: _workoutsById,
                                   ),
                                   _TableView(
                                     logs: filteredLogs,
                                     logRepo: widget.logRepo,
                                     onChanged: _load,
+                                    workoutLabel: _workoutLabel,
+                                    workoutsById: _workoutsById,
                                   ),
                                 ],
                               ),
@@ -148,6 +181,48 @@ class _ExerciseProgressScreenState extends State<ExerciseProgressScreen> {
                   SizedBox(height: MediaQuery.paddingOf(context).bottom),
                 ],
               ),
+      ),
+    );
+  }
+
+  /// "Workout: [All workouts ▾]" — only workouts this exercise was logged in.
+  Widget _buildWorkoutDropdown() {
+    final options = workoutFilterOptions(_logs, _workoutsById);
+    // Opened pre-filtered on a workout with no logs (or its last log was just
+    // deleted): keep it selectable so the dropdown has a matching item.
+    if (!options.any((o) => o.filter == _workoutFilter)) {
+      options.add(WorkoutFilterOption(
+        filter: _workoutFilter,
+        label: _workoutFilter.workoutId == null
+            ? 'No workout'
+            : _workoutsById[_workoutFilter.workoutId]?.name ?? 'Workout',
+        count: 0,
+      ));
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: DropdownButtonFormField<WorkoutFilter>(
+        key: ValueKey(_workoutFilter),
+        initialValue: _workoutFilter,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Workout',
+          isDense: true,
+          border: OutlineInputBorder(),
+        ),
+        items: [
+          for (final o in options)
+            DropdownMenuItem(
+              value: o.filter,
+              child: Text(
+                '${o.label}${o.deleted ? ' (deleted)' : ''} · ${o.count}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (f) {
+          if (f != null) setState(() => _workoutFilter = f);
+        },
       ),
     );
   }
@@ -162,6 +237,9 @@ class _GraphView extends StatefulWidget {
   final ExerciseLogRepository logRepo;
   final VoidCallback onChanged;
   final ChartFilter filter;
+  final WorkoutFilter workoutFilter;
+  final String? Function(ExerciseLog) workoutLabel;
+  final Map<String, Workout> workoutsById;
 
   const _GraphView({
     required this.logs,
@@ -170,6 +248,9 @@ class _GraphView extends StatefulWidget {
     required this.logRepo,
     required this.onChanged,
     required this.filter,
+    required this.workoutFilter,
+    required this.workoutLabel,
+    required this.workoutsById,
   });
 
   @override
@@ -182,7 +263,9 @@ class _GraphViewState extends State<_GraphView> {
   @override
   void didUpdateWidget(_GraphView old) {
     super.didUpdateWidget(old);
-    if (old.granularity != widget.granularity || old.filter != widget.filter) {
+    if (old.granularity != widget.granularity ||
+        old.filter != widget.filter ||
+        old.workoutFilter != widget.workoutFilter) {
       _selectedLog = null;
     }
   }
@@ -241,6 +324,8 @@ class _GraphViewState extends State<_GraphView> {
               const SizedBox(height: 16),
               _LogDetailPanel(
                 log: _selectedLog!,
+                workoutName: widget.workoutLabel(_selectedLog!),
+                workoutsById: widget.workoutsById,
                 logRepo: widget.logRepo,
                 onClose: () => setState(() => _selectedLog = null),
                 onChanged: () {
@@ -260,12 +345,16 @@ class _GraphViewState extends State<_GraphView> {
 
 class _LogDetailPanel extends StatelessWidget {
   final ExerciseLog log;
+  final String? workoutName;
+  final Map<String, Workout> workoutsById;
   final ExerciseLogRepository logRepo;
   final VoidCallback onClose;
   final VoidCallback onChanged;
 
   const _LogDetailPanel({
     required this.log,
+    required this.workoutName,
+    required this.workoutsById,
     required this.logRepo,
     required this.onClose,
     required this.onChanged,
@@ -277,6 +366,7 @@ class _LogDetailPanel extends StatelessWidget {
       isScrollControlled: true,
       builder: (_) => _ExerciseLogEditSheet(
         log: log,
+        workoutsById: workoutsById,
         logRepo: logRepo,
         onSaved: onChanged,
         onDeleted: onChanged,
@@ -317,6 +407,9 @@ class _LogDetailPanel extends StatelessWidget {
                 ),
               ],
             ),
+            Text(workoutName ?? 'No workout',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.primary)),
             if (log.notes != null && log.notes!.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(log.notes!, style: theme.textTheme.bodySmall),
@@ -345,12 +438,22 @@ class _TableView extends StatelessWidget {
   final List<ExerciseLog> logs;
   final ExerciseLogRepository logRepo;
   final VoidCallback onChanged;
+  final String? Function(ExerciseLog) workoutLabel;
+  final Map<String, Workout> workoutsById;
 
   const _TableView({
     required this.logs,
     required this.logRepo,
     required this.onChanged,
+    required this.workoutLabel,
+    required this.workoutsById,
   });
+
+  static const _workoutHeader = DataColumn(
+      label: Text('Workout', style: TextStyle(fontWeight: FontWeight.bold)));
+
+  DataCell _workoutCell(ExerciseLog l) =>
+      DataCell(Text(workoutLabel(l) ?? '-'));
 
   void _openEdit(BuildContext context, ExerciseLog log) {
     showModalBottomSheet(
@@ -358,6 +461,7 @@ class _TableView extends StatelessWidget {
       isScrollControlled: true,
       builder: (_) => _ExerciseLogEditSheet(
         log: log,
+        workoutsById: workoutsById,
         logRepo: logRepo,
         onSaved: onChanged,
         onDeleted: onChanged,
@@ -398,6 +502,7 @@ class _TableView extends StatelessWidget {
                     const DataColumn(
                         label: Text('Date',
                             style: TextStyle(fontWeight: FontWeight.bold))),
+                    _workoutHeader,
                     const DataColumn(label: SizedBox.shrink()),
                   ],
                   reversed
@@ -407,6 +512,7 @@ class _TableView extends StatelessWidget {
                                 l.sets.isNotEmpty ? l.sets.first.unit : '-')),
                             DataCell(
                                 Text(DateFormat('dd/MM/yy').format(l.date))),
+                            _workoutCell(l),
                             DataCell(IconButton(
                               icon: const Icon(Icons.edit, size: 18),
                               onPressed: () => _openEdit(context, l),
@@ -423,6 +529,7 @@ class _TableView extends StatelessWidget {
                     const DataColumn(
                         label: Text('Date',
                             style: TextStyle(fontWeight: FontWeight.bold))),
+                    _workoutHeader,
                     const DataColumn(label: SizedBox.shrink()),
                   ],
                   reversed
@@ -430,6 +537,7 @@ class _TableView extends StatelessWidget {
                             DataCell(Text(l.volume.toStringAsFixed(2))),
                             DataCell(
                                 Text(DateFormat('dd/MM/yy').format(l.date))),
+                            _workoutCell(l),
                             DataCell(IconButton(
                               icon: const Icon(Icons.edit, size: 18),
                               onPressed: () => _openEdit(context, l),
@@ -450,12 +558,14 @@ class _TableView extends StatelessWidget {
 
 class _ExerciseLogEditSheet extends StatefulWidget {
   final ExerciseLog log;
+  final Map<String, Workout> workoutsById;
   final ExerciseLogRepository logRepo;
   final VoidCallback onSaved;
   final VoidCallback onDeleted;
 
   const _ExerciseLogEditSheet({
     required this.log,
+    required this.workoutsById,
     required this.logRepo,
     required this.onSaved,
     required this.onDeleted,
@@ -470,11 +580,13 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
   late DateTime _date;
   late List<SetChild> _sets;
   late TextEditingController _notesCtrl;
+  late String? _workoutId;
   bool _dirty = false;
 
   @override
   void initState() {
     super.initState();
+    _workoutId = widget.log.workoutId;
     _date = widget.log.date;
     _sets = widget.log.sets
         .map((s) =>
@@ -491,12 +603,20 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
   }
 
   Future<void> _save() async {
+    final id = _workoutId;
     final updated = ExerciseLog(
       id: widget.log.id,
       exerciseId: widget.log.exerciseId,
       date: _date,
       notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       sets: _sets,
+      workoutId: id,
+      // Current name while the workout exists; a deleted one keeps its
+      // stored name.
+      workoutName: id == null
+          ? null
+          : widget.workoutsById[id]?.name ??
+              (id == widget.log.workoutId ? widget.log.workoutName : null),
     );
     try {
       await widget.logRepo.update(updated);
@@ -529,6 +649,38 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
         ),
       );
     }
+  }
+
+  /// Lets a mis-tagged or untagged (pre-v5) log be moved to another workout.
+  Widget _buildWorkoutField() {
+    final workouts = widget.workoutsById.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final original = widget.log.workoutId;
+    final originalDeleted =
+        original != null && !widget.workoutsById.containsKey(original);
+    return DropdownButtonFormField<String?>(
+      initialValue: _workoutId,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Workout'),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('No workout')),
+        for (final w in workouts)
+          DropdownMenuItem<String?>(
+              value: w.id,
+              child: Text(w.name, overflow: TextOverflow.ellipsis)),
+        if (originalDeleted)
+          DropdownMenuItem<String?>(
+            value: original,
+            child: Text(
+                '${widget.log.workoutName ?? 'Deleted workout'} (deleted)',
+                overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: (v) => setState(() {
+        _workoutId = v;
+        _dirty = true;
+      }),
+    );
   }
 
   Future<void> _confirmDelete() async {
@@ -582,6 +734,8 @@ class _ExerciseLogEditSheetState extends State<_ExerciseLogEditSheet> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            _buildWorkoutField(),
             const SizedBox(height: 12),
             DatePickerField(
               date: _date,

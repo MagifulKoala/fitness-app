@@ -273,6 +273,11 @@ void main() {
               'CREATE TABLE exercises (id TEXT PRIMARY KEY, '
               'name TEXT NOT NULL, aliases TEXT, notes TEXT)',
             );
+            // Later migrations (v5) alter this table, so it must exist.
+            await db.execute(
+              'CREATE TABLE exercise_logs (id TEXT PRIMARY KEY, '
+              'exercise_id TEXT NOT NULL, date TEXT NOT NULL, notes TEXT)',
+            );
           },
         );
         await old.close();
@@ -280,7 +285,7 @@ void main() {
         DatabaseHelper.pathOverride = path;
         await DatabaseHelper.resetForTesting();
         final db = await DatabaseHelper.instance.database;
-        expect(await db.getVersion(), 4);
+        expect(await db.getVersion(), 5);
 
         final repo = testRepositories().exerciseRepo;
         await repo.addAlternative('x', 'y');
@@ -317,6 +322,122 @@ void main() {
         await repo.getByDateRange(DateTime(2030, 1, 1), DateTime(2030, 1, 2)),
         isEmpty,
       );
+    });
+
+    test('a log keeps its workout through insert and update', () async {
+      final repo = testRepositories().exerciseLogRepo;
+      final base = _log('l', 'e', DateTime(2026, 1, 1));
+      await repo.insert(ExerciseLog(
+        id: base.id,
+        exerciseId: base.exerciseId,
+        date: base.date,
+        sets: base.sets,
+        workoutId: 'w1',
+        workoutName: 'Push',
+      ));
+      await repo.insert(_log('untagged', 'e', DateTime(2026, 1, 2)));
+
+      final byId = {for (final l in await repo.getByExerciseId('e')) l.id: l};
+      expect(byId['l']!.workoutId, 'w1');
+      expect(byId['l']!.workoutName, 'Push');
+      expect(byId['untagged']!.workoutId, isNull);
+      expect(byId['untagged']!.workoutName, isNull);
+
+      // Re-tag from the edit sheet.
+      await repo.update(ExerciseLog(
+        id: 'untagged',
+        exerciseId: 'e',
+        date: DateTime(2026, 1, 2),
+        sets: const [SetChild(id: 'new', reps: 5, weight: 100, unit: 'kg')],
+        workoutId: 'w2',
+        workoutName: 'Legs',
+      ));
+      final retagged =
+          (await repo.getAll()).firstWhere((l) => l.id == 'untagged');
+      expect(retagged.workoutId, 'w2');
+      expect(retagged.workoutName, 'Legs');
+    });
+
+    test('deleting a workout keeps its logs and their workout name', () async {
+      final repos = testRepositories();
+      await repos.workoutRepo.insert(
+        const Workout(id: 'w', name: 'Rehab', exerciseIds: []),
+      );
+      await repos.exerciseLogRepo.insert(ExerciseLog(
+        id: 'l',
+        exerciseId: 'e',
+        date: DateTime(2026, 1, 1),
+        sets: const [SetChild(id: 's', reps: 10, weight: 5, unit: 'kg')],
+        workoutId: 'w',
+        workoutName: 'Rehab',
+      ));
+      await repos.workoutRepo.delete('w');
+
+      final log = (await repos.exerciseLogRepo.getAll()).single;
+      expect(log.workoutId, 'w');
+      expect(log.workoutName, 'Rehab');
+    });
+
+    test('upgrading a v4 database keeps old logs with no workout', () async {
+      final dir = await Directory.systemTemp.createTemp('workout_db');
+      final path = '${dir.path}/v4.db';
+      try {
+        final old = await openDatabase(
+          path,
+          version: 4,
+          onCreate: (db, _) async {
+            await db.execute(
+              'CREATE TABLE exercise_logs (id TEXT PRIMARY KEY, '
+              'exercise_id TEXT NOT NULL, date TEXT NOT NULL, notes TEXT)',
+            );
+            await db.execute(
+              'CREATE TABLE exercise_log_sets (id TEXT PRIMARY KEY, '
+              'log_id TEXT NOT NULL, reps INTEGER NOT NULL, '
+              'weight REAL NOT NULL, unit TEXT NOT NULL)',
+            );
+            await db.insert('exercise_logs', {
+              'id': 'old',
+              'exercise_id': 'e',
+              'date': DateTime(2025, 6, 1).toIso8601String(),
+              'notes': 'before v5',
+            });
+            await db.insert('exercise_log_sets', {
+              'id': 's',
+              'log_id': 'old',
+              'reps': 5,
+              'weight': 100.0,
+              'unit': 'kg',
+            });
+          },
+        );
+        await old.close();
+
+        DatabaseHelper.pathOverride = path;
+        await DatabaseHelper.resetForTesting();
+        final db = await DatabaseHelper.instance.database;
+        expect(await db.getVersion(), 5);
+
+        final repo = testRepositories().exerciseLogRepo;
+        final kept = (await repo.getAll()).single;
+        expect(kept.notes, 'before v5');
+        expect(kept.sets.single.weight, 100);
+        expect(kept.workoutId, isNull);
+
+        await repo.insert(ExerciseLog(
+          id: 'new',
+          exerciseId: 'e',
+          date: DateTime(2026, 1, 1),
+          sets: const [],
+          workoutId: 'w',
+          workoutName: 'Push',
+        ));
+        final added = (await repo.getAll()).firstWhere((l) => l.id == 'new');
+        expect(added.workoutName, 'Push');
+      } finally {
+        await DatabaseHelper.resetForTesting();
+        DatabaseHelper.pathOverride = inMemoryDatabasePath;
+        await dir.delete(recursive: true);
+      }
     });
 
     test('logging the same sets twice does not collide', () async {

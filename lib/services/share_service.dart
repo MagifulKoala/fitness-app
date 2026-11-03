@@ -140,6 +140,8 @@ class ShareService {
                 'exercise':
                     exerciseById[entry.exerciseId]?.name ?? entry.exerciseId,
                 'date': _isoDate(entry.date),
+                // Workout name at log time; null = logged outside a workout.
+                'workout': entry.workoutName,
                 'notes': entry.notes,
                 'sets': entry.sets
                     .map((s) =>
@@ -181,6 +183,10 @@ class ShareService {
     }
   }
 
+  /// `  [Push]` after a log line, or nothing for a log with no workout.
+  static String _workoutSuffix(ExerciseLog entry) =>
+      entry.workoutName == null ? '' : '  [${entry.workoutName}]';
+
   static String _buildLogText(
     DateTime from,
     DateTime to,
@@ -200,7 +206,8 @@ class ShareService {
     for (final dateKey in byDate.keys.toList()..sort()) {
       buf.writeln(_dayFmt.format(DateTime.parse(dateKey)));
       for (final entry in byDate[dateKey]!) {
-        buf.writeln('  ${exerciseById[entry.exerciseId]?.name ?? entry.exerciseId}');
+        buf.writeln('  ${exerciseById[entry.exerciseId]?.name ?? entry.exerciseId}'
+            '${_workoutSuffix(entry)}');
         for (final s in entry.sets) {
           buf.writeln('    ${s.reps} × ${s.weight} ${s.unit}');
         }
@@ -339,7 +346,7 @@ class ShareService {
       buf.writeln();
 
       for (final entry in logs.reversed) {
-        buf.writeln('  ${dateFmtShort.format(entry.date)}');
+        buf.writeln('  ${dateFmtShort.format(entry.date)}${_workoutSuffix(entry)}');
         for (var k = 0; k < entry.sets.length; k++) {
           final s = entry.sets[k];
           buf.writeln('    ${k + 1}. ${s.reps} reps × ${s.weight} ${s.unit}');

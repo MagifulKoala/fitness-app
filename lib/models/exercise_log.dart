@@ -8,12 +8,22 @@ class ExerciseLog extends Equatable {
   final String? notes;
   final List<SetChild> sets;
 
+  /// The workout this log was done in, or null (logged from the Exercises tab,
+  /// or recorded before schema v5). May point at a workout that was deleted.
+  final String? workoutId;
+
+  /// The workout's name when the log was saved. Keeps deleted workouts
+  /// readable; while the workout exists its current name is shown instead.
+  final String? workoutName;
+
   const ExerciseLog({
     required this.id,
     required this.exerciseId,
     required this.date,
     this.notes,
     required this.sets,
+    this.workoutId,
+    this.workoutName,
   });
 
   double get volume =>
@@ -30,6 +40,8 @@ class ExerciseLog extends Equatable {
       'exercise_id': exerciseId,
       'date': date.toIso8601String(),
       'notes': notes,
+      'workout_id': workoutId,
+      'workout_name': workoutName,
     };
   }
 
@@ -40,9 +52,12 @@ class ExerciseLog extends Equatable {
       date: DateTime.parse(map['date'] as String),
       notes: map['notes'] as String?,
       sets: sets,
+      workoutId: map['workout_id'] as String?,
+      workoutName: map['workout_name'] as String?,
     );
   }
 
   @override
-  List<Object?> get props => [id, exerciseId, date, notes, sets];
+  List<Object?> get props =>
+      [id, exerciseId, date, notes, sets, workoutId, workoutName];
 }

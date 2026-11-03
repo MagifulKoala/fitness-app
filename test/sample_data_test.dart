@@ -125,6 +125,66 @@ void main() {
     expect(sessions, isNotEmpty);
     expect(sessions.every((s) => workoutIds.contains(s.workoutId)), isTrue);
 
+    // Per-workout stats: logs remember their workout.
+    final wByName = {for (final w in workouts) w.name: w};
+    final workoutsById = {for (final w in workouts) w.id: w};
+    expect(
+      logs.where((l) => l.workoutId != null).length,
+      greaterThan(logs.length * 0.8),
+      reason: 'most logs carry a workout',
+    );
+    expect(
+      logs.every((l) => (l.workoutId == null) == (l.workoutName == null)),
+      isTrue,
+      reason: 'id and name are stored together',
+    );
+    final untagged = logs.where((l) => l.workoutId == null).toList();
+    expect(untagged, isNotEmpty, reason: 'old logs with no workout');
+    expect(
+      untagged.any((l) => today.difference(l.date).inDays < 30),
+      isTrue,
+      reason: 'a recent log from the Exercises tab',
+    );
+
+    Set<String?> workoutsOf(String exercise) =>
+        {for (final l in logsOf[exercise]!) l.workoutId};
+    expect(
+      workoutsOf('Bench Press'),
+      containsAll([wByName['Full Body']!.id, wByName['Push']!.id]),
+      reason: 'same exercise logged in two workouts',
+    );
+
+    final fullBodyLogs =
+        logs.where((l) => l.workoutId == wByName['Full Body']!.id);
+    expect(fullBodyLogs, isNotEmpty);
+    expect(
+      fullBodyLogs.every((l) => l.workoutName == 'Beginner Full Body'),
+      isTrue,
+      reason: 'renamed workout: stored name differs from the current one',
+    );
+
+    final deleted = logs
+        .where((l) => l.workoutId != null && !workoutIds.contains(l.workoutId))
+        .toList();
+    expect(deleted, isNotEmpty, reason: 'logs from a deleted workout');
+    expect(deleted.every((l) => l.workoutName == 'Rehab'), isTrue);
+    expect(
+      {for (final l in deleted) workoutsById[l.workoutId]},
+      {null},
+    );
+
+    final upper = wByName['Upper']!;
+    expect(upper.exerciseIds, isNotEmpty);
+    expect(
+      logs.where((l) => l.workoutId == upper.id),
+      isEmpty,
+      reason: 'a workout that was never logged',
+    );
+    expect(
+      plans.any((p) => p.entries.any((e) => e.workoutId == upper.id)),
+      isFalse,
+    );
+
     // Measurements
     final measurements = await repos.measurementRepo.getAllMeasurements();
     final mByName = {for (final m in measurements) m.name: m};

@@ -158,7 +158,7 @@ instead, since screenshotting a mirror window is lossy.
 ## Testing
 
 ```bash
-flutter test                         # everything: 75 tests, ~2 s, no device needed
+flutter test                         # everything: 97 tests, ~2 s, no device needed
 flutter test test/repositories_test.dart
 ```
 
@@ -168,9 +168,10 @@ flutter test test/repositories_test.dart
 | `test/chart_filter_test.dart` | calendar windows, granularity, period keys, dots |
 | `test/axis_scale_test.dart` | chart y-axis scaling and tick labels |
 | `test/aggregation_test.dart` | log / measurement aggregation per granularity |
-| `test/repositories_test.dart` | every repository against a real in-memory SQLite DB; exercise alternatives (symmetry, non-transitivity, cascades); v3→v4 upgrade of a real DB file; workout reorder |
+| `test/repositories_test.dart` | every repository against a real in-memory SQLite DB; exercise alternatives (symmetry, non-transitivity, cascades); v3→v5 and v4→v5 upgrades of a real DB file; workout reorder; log workout tags survive update and workout delete |
 | `test/sample_data_test.dart` | sample data loads, is consistent and contains its edge cases |
 | `test/progress_line_chart_test.dart` | chart widget renders 1–2 series and toggles |
+| `test/exercise_stats_test.dart` | per-workout stats: `WorkoutFilter`, filter options, stats, starting sets, set formatting; `ExerciseStatsCard` widget |
 | `test/plan_schedule_test.dart` | `planScheduleByDay` grouping, rest days, deleted workouts |
 | `test/bottom_action_bar_test.dart` | Save bar stays above 0 / gesture / 3-button nav bar heights |
 
@@ -188,6 +189,8 @@ lib/
   app_repositories.dart     ← InheritedWidget holding all data repositories
   core/
     app_logger.dart         ← shared Logger instance (package:logger)
+    exercise_stats.dart     ← pure per-workout stats logic (WorkoutFilter, computeExerciseStats,
+                               workoutFilterOptions, startingSets, formatSets)
   dev/
     sample_data.dart        ← SampleData.load(): wipes DB and seeds test data (debug builds only)
   models/                   ← Dart data classes (Equatable, toMap/fromMap)
@@ -214,7 +217,8 @@ lib/
     share_service.dart      ← static helpers for export/import/auto-backup (workout plans, exercise logs, full backup)
   widgets/                  ← SetRowWidget, LinkRowWidget, DatePickerField, ProgressLineChart, ChartFilterBar,
                                AxisScale (pure y-axis scaling used by ProgressLineChart),
-                               BottomActionBar (Save button pinned above the system nav bar)
+                               BottomActionBar (Save button pinned above the system nav bar),
+                               ExerciseStatsCard (per-workout stats on the exercise screen)
 test/                       ← unit + widget tests (see Testing); helpers/test_db.dart = in-memory DB
 ```
 
@@ -225,7 +229,10 @@ test/                       ← unit + widget tests (see Testing); helpers/test_
   one row per pair with the smaller id in `exercise_a`, enforced by a CHECK). Not a field on `Exercise`;
   read/write via `ExerciseRepository.getAlternatives / addAlternative / removeAlternative / setAlternatives`.
   Deleting an exercise removes its links.
-- **ExerciseLog** — snapshot of set data at log time (independent of future template edits)
+- **ExerciseLog** — snapshot of set data at log time (independent of future template edits), plus the
+  workout it was done in: nullable `workoutId` + `workoutName` (name at log time, so logs from a deleted
+  workout stay readable; while the workout exists its *current* name is shown). Null = no workout
+  (logged from the Exercises tab, or recorded before schema v5).
 - **Workout** — name, notes, ordered list of exercise IDs
 - **WorkoutPlan** — name, list of **WorkoutPlanEntry** (workoutId + dayOfWeek 1–7)
 - **WorkoutSession** — logs that a workout was performed on a date
@@ -275,7 +282,7 @@ adb logcat flutter:E *:S            # errors only
 ## Database Notes
 
 - DB file: `workout_app.db` in the app documents directory
-- **Schema version: 4** — bump version and add a new `if (oldVersion < N)` block in `_onUpgrade` in `lib/db/database_helper.dart` for every schema change. Never edit earlier migration blocks.
+- **Schema version: 5** — bump version and add a new `if (oldVersion < N)` block in `_onUpgrade` in `lib/db/database_helper.dart` for every schema change. Never edit earlier migration blocks.
 - On first launch, a default **"Weight"** measurement is seeded automatically
 - Dates stored as ISO 8601 strings; displayed as dd/MM/yy via `intl`
 - `app_settings` table is intentionally excluded from `clearAll()` so user preferences (e.g. dark mode) survive a data wipe
@@ -287,6 +294,7 @@ adb logcat flutter:E *:S            # errors only
 | 2 | Added `app_settings` key-value table for app preferences |
 | 3 | Added `exercise_links` table (id, exercise_id, url, label, sort_order) |
 | 4 | Added `exercise_alternatives` table (exercise_a, exercise_b; PK pair, CHECK a < b) |
+| 5 | `exercise_logs` gains nullable `workout_id`, `workout_name`; index on (exercise_id, workout_id) |
 
 ## Protecting Real Data on a Daily-Driver Phone
 
@@ -410,7 +418,19 @@ Commit locally; the user pushes. Don't push unless asked.
 ## Feature Overview
 
 ### Exercises tab
-- List of all exercises; tap to open `ExerciseDetailScreen` (shows aliases, notes, links, set template, alternatives; Log FAB).
+- List of all exercises; tap to open `ExerciseDetailScreen` (stats card, aliases, notes, links, set template, alternatives; Log FAB).
+- **Per-workout stats** (design: `claude-context/2026-11-03-per-workout-exercise-stats-design.md`). Each log
+  remembers its workout. `ExerciseDetailScreen` takes an optional `workout` (passed by `WorkoutDetailScreen`
+  and carried on to alternatives):
+  - **Stats card** (`ExerciseStatsCard`) at the top: "IN PUSH" (that workout only) or "ALL WORKOUTS"
+    (names the workout each value came from). Last log + sets, best set (most reps for bodyweight),
+    times logged, *See progress →* (opens the progress screen pre-filtered on that workout). First time
+    in a workout: "No logs in X yet" plus a hint from the last log elsewhere.
+  - **Log sheet**: Workout dropdown (context workout pre-selected; "No workout" from the Exercises tab).
+    Sets start from the last log in the selected workout, else the set template; changing the workout
+    refills them until the user edits a set. Saving stores the workout id and current name.
+  - Stats follow the **workout, not the plan**; a reordered workout keeps one line (make a new workout to
+    start fresh).
 - FAB opens `ExerciseFormScreen` (create/edit name, aliases, notes, links, set template).
 - From `ExerciseDetailScreen`, the Log FAB opens a log sheet to record a session.
 - **Alternatives** (bottom of `ExerciseDetailScreen`): exercises to swap in when equipment is busy. Tap one
@@ -446,6 +466,10 @@ Commit locally; the user pushes. Don't push unless asked.
   - X-axis labels are granularity-aware: monthly view shows "MMM", weekly shows "W1 Jan", other views show "dd/MM".
   - When only one aggregated point exists, the dot is always shown.
   - Data table (Weight and Volume sub-tabs) shows raw individual log entries within the selected window, with edit/delete per row.
+  - **Workout filter** (dropdown above the time filter): All workouts, each workout the exercise was logged
+    in (most recent first, deleted ones marked), No workout. Combines with the time filter. Default All,
+    or the `initialWorkoutFilter` passed by *See progress*. The table has a Workout column, the dot detail
+    panel shows the workout, and the edit sheet can re-tag a log (e.g. old untagged ones).
 - **Body sub-tab**: searchable list of all measurements (filters by name) → `MeasurementProgressScreen`.
   - Same filter bar, calendar-aligned windows, adaptive granularity, and axis labels as the exercise screen.
   - Single-series line chart; table shows raw entries within the selected window with edit/delete.
@@ -458,7 +482,7 @@ Commit locally; the user pushes. Don't push unless asked.
   - **Share**: Export workout plan (JSON), Export exercise logs (JSON + human-readable .txt, with period picker), Import workout plan (from JSON file).
   - **Save backup**: dumps all exercises (aliases, notes, set template) and all logs per exercise to a human-readable `.txt` file at a user-chosen location via `FilePicker.saveFile` (Storage Access Framework — no extra permissions needed). On success, updates the last backup timestamp (same as auto-backup) so `DataScreen` reflects it.
   - **Manage data**: "Clear all data" — confirmation dialog, wipes all workout/exercise/measurement data, re-seeds default Weight measurement, preserves app preferences.
-  - **Developer → Load sample data** (only when `kDebugMode`, i.e. the `.dev` build; compiled out of release): confirmation dialog, then `SampleData.load` wipes all data and seeds ~14 months of history — 16 exercises, 5 workouts, 3 plans, ~1100 logs, 7 measurements. Deterministic (`Random(42)`) with dates relative to today, so every chart filter has data. Includes deliberate edge cases (never-logged exercise, bodyweight weight-0 exercises, an lbs exercise, two logs on one day, empty workout/plan, single-entry and no-entry measurements) — listed in the class doc comment. History rows are written in one batched transaction (~2 s); going through the repositories took ~56 s.
+  - **Developer → Load sample data** (only when `kDebugMode`, i.e. the `.dev` build; compiled out of release): confirmation dialog, then `SampleData.load` wipes all data and seeds ~14 months of history — 16 exercises, 6 workouts, 3 plans, ~1100 logs, 7 measurements. Deterministic (`Random(42)`) with dates relative to today, so every chart filter has data. Includes deliberate edge cases (never-logged exercise, bodyweight weight-0 exercises, an lbs exercise, two logs on one day, empty workout/plan, single-entry and no-entry measurements; per-workout stats: exercises logged in two workouts, untagged old logs, a renamed workout, a deleted "Rehab" workout, a never-logged "Upper" workout) — listed in the class doc comment. History rows are written in one batched transaction (~2 s); going through the repositories took ~56 s.
 
 ### Share / Import (trainer ↔ client workflow)
 File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
@@ -467,6 +491,12 @@ File-based data exchange via `ShareService` (`lib/services/share_service.dart`):
 - **Import workout plan**: picks a `.json` file, deduplicates exercises by name (case-insensitive), always creates new Workout and WorkoutPlan objects with fresh UUIDs.
 
 ## Recent Changes
+
+- **Per-workout exercise stats** (schema v5): logs remember their workout. Stats card on the exercise
+  screen, workout-aware log sheet (starts from last time in that workout), workout filter + column on
+  the exercise progress screen, re-tag in the edit sheet. Log exports (JSON `workout` field, text
+  `[Workout]`) and text backups include the workout name at log time. Sample data covers tagged,
+  untagged, renamed, deleted (Rehab) and never-logged (Upper) workouts.
 
 - **Exercise alternatives** (schema v4): symmetric links between exercises, shown and edited at the bottom
   of the exercise detail screen. Included in the text backups; not in workout-plan exports. Sample data

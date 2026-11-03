@@ -38,10 +38,27 @@ import '../models/workout_session.dart';
 /// - Alternatives: Lat Pulldown links to both Pull-up and Barbell Row, which
 ///   are NOT linked to each other (links are not transitive). Most exercises,
 ///   e.g. Farmer's Carry, have none.
+/// - Per-workout stats (logs remember their workout):
+///   - Bench Press, Squat, Barbell Row, Overhead Press and Plank are logged in
+///     both Full Body and a PPL workout, so they have two workout lines.
+///   - Full Body logs store the workout's old name "Beginner Full Body"; the
+///     app must show the current name, "Full Body".
+///   - Rehab: a deleted workout (its id is in no table). Light Squat and Leg
+///     Press logs ~9-10 months ago keep the stored name "Rehab".
+///   - The first month of history has no workout (logs from before workouts
+///     were tracked), as does the second same-day Bench Press log (logged
+///     from the Exercises tab).
+///   - Upper: a workout in no plan that was never logged, so its exercises
+///     show "No logs in Upper yet" plus a hint from another workout.
 class SampleData {
   static const _uuid = Uuid();
   static const _historyDays = 420;
   static const _phaseSwitchDaysAgo = 182;
+  // Logs older than this carry no workout (recorded before schema v5).
+  static const _untaggedBeforeDaysAgo = 390;
+  // Rehab block after a (fictional) back tweak, in the Full Body phase.
+  static const _rehabFromDaysAgo = 300;
+  static const _rehabToDaysAgo = 260;
 
   static Future<void> load(AppRepositories repos) async {
     final sw = Stopwatch()..start();
@@ -183,7 +200,12 @@ class SampleData {
       [],
       'No exercises on purpose: empty-workout edge case.',
     );
-    for (final w in [push, pull, legs, fullBody, mobility]) {
+    final upper = workout(
+      'Upper',
+      ['Bench Press', 'Barbell Row', 'Lat Pulldown', 'Dumbbell Curl'],
+      'In no plan and never logged: "No logs in Upper yet" edge case.',
+    );
+    for (final w in [push, pull, legs, fullBody, mobility, upper]) {
       await repos.workoutRepo.insert(w);
     }
 
@@ -262,9 +284,51 @@ class SampleData {
       );
 
       final weeks = (_historyDays - daysAgo) / 7;
+      final tagged = daysAgo <= _untaggedBeforeDaysAgo;
       for (final id in w.exerciseIds) {
         final s = specs.firstWhere((s) => s.id == id);
-        logs.add(_log(s, at, s.weightAt(weeks), rnd));
+        logs.add(
+          _log(
+            s,
+            at,
+            s.weightAt(weeks),
+            rnd,
+            workoutId: tagged ? w.id : null,
+            // Full Body was renamed after these logs were saved.
+            workoutName: !tagged
+                ? null
+                : w == fullBody
+                ? 'Beginner Full Body'
+                : w.name,
+          ),
+        );
+      }
+    }
+
+    // Rehab: a workout that has since been deleted. Its logs keep the id and
+    // the stored name, at well under normal weights.
+    final rehabId = _uuid.v4();
+    for (var daysAgo = _rehabFromDaysAgo;
+        daysAgo >= _rehabToDaysAgo;
+        daysAgo--) {
+      final day = today.subtract(Duration(days: daysAgo));
+      if (day.weekday != DateTime.tuesday && day.weekday != DateTime.thursday) {
+        continue;
+      }
+      final at = DateTime(day.year, day.month, day.day, 10, rnd.nextInt(60));
+      final weeks = (_historyDays - daysAgo) / 7;
+      for (final name in ['Squat', 'Leg Press']) {
+        final s = ex[name]!;
+        logs.add(
+          _log(
+            s,
+            at,
+            (s.weightAt(weeks) * 0.4 / 2.5).round() * 2.5,
+            rnd,
+            workoutId: rehabId,
+            workoutName: 'Rehab',
+          ),
+        );
       }
     }
 
@@ -284,6 +348,7 @@ class SampleData {
         bench.weightAt((_historyDays - today.difference(sameDay).inDays) / 7) *
             0.8,
         rnd,
+        // Logged from the Exercises tab: no workout.
         notes: 'Second session same day: tests aggregation.',
       ),
     );
@@ -374,12 +439,16 @@ class SampleData {
     double weight,
     Random rnd, {
     String? notes,
+    String? workoutId,
+    String? workoutName,
   }) {
     return ExerciseLog(
       id: _uuid.v4(),
       exerciseId: s.id,
       date: at,
       notes: notes,
+      workoutId: workoutId,
+      workoutName: workoutName,
       sets: [
         for (var i = 0; i < s.reps.length; i++)
           SetChild(

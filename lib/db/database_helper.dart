@@ -43,11 +43,17 @@ class DatabaseHelper {
     }
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
+
+  // Speeds up per-workout lookups (stats card, starting sets, progress filter).
+  static const _logWorkoutIndex = '''
+    CREATE INDEX IF NOT EXISTS idx_exercise_logs_exercise_workout
+      ON exercise_logs (exercise_id, workout_id)
+  ''';
 
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
@@ -81,9 +87,12 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         exercise_id TEXT NOT NULL,
         date TEXT NOT NULL,
-        notes TEXT
+        notes TEXT,
+        workout_id TEXT,
+        workout_name TEXT
       )
     ''');
+    await db.execute(_logWorkoutIndex);
 
     await db.execute('''
       CREATE TABLE exercise_log_sets (
@@ -248,6 +257,14 @@ class DatabaseHelper {
           CHECK (exercise_a < exercise_b)
         )
       ''');
+    }
+    if (oldVersion < 5) {
+      // v5: each log remembers the workout it was done in (per-workout stats).
+      // Both nullable: older logs have no workout.
+      await db.execute('ALTER TABLE exercise_logs ADD COLUMN workout_id TEXT');
+      await db
+          .execute('ALTER TABLE exercise_logs ADD COLUMN workout_name TEXT');
+      await db.execute(_logWorkoutIndex);
     }
   }
 }

@@ -80,6 +80,25 @@ void main() {
       expect(ExerciseLog.fromMap(log.toMap(), sets), log);
     });
 
+    test('ExerciseLog keeps its workout; no workout stays null', () {
+      final tagged = ExerciseLog(
+          id: 'l',
+          exerciseId: 'e',
+          date: DateTime(2026, 3, 4),
+          sets: sets,
+          workoutId: 'w',
+          workoutName: 'Push');
+      final back = ExerciseLog.fromMap(tagged.toMap(), sets);
+      expect(back, tagged);
+      expect(back.workoutId, 'w');
+      expect(back.workoutName, 'Push');
+
+      final untagged = ExerciseLog(
+          id: 'l', exerciseId: 'e', date: DateTime(2026, 3, 4), sets: sets);
+      expect(ExerciseLog.fromMap(untagged.toMap(), sets).workoutId, isNull);
+      expect(untagged, isNot(tagged));
+    });
+
     test('MeasurementEntry', () {
       final e = MeasurementEntry(
           id: 'm1',

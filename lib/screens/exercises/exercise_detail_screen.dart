@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../app_repositories.dart';
 import '../../core/app_logger.dart';
+import '../../core/exercise_stats.dart';
 import '../../models/exercise.dart';
 import '../../models/exercise_log.dart';
 import '../../models/set_child.dart';
+import '../../models/workout.dart';
 import '../../repositories/exercise_log_repository.dart';
 import '../../repositories/exercise_repository.dart';
 import '../../widgets/date_picker_field.dart';
+import '../../widgets/exercise_stats_card.dart';
 import '../../widgets/set_row_widget.dart';
+import '../progress/exercise_progress_screen.dart';
 import 'alternatives_picker_screen.dart';
 import 'exercise_form_screen.dart';
 
@@ -17,10 +22,15 @@ class ExerciseDetailScreen extends StatefulWidget {
   final Exercise exercise;
   final ExerciseRepository exerciseRepo;
 
+  /// The workout this screen was opened from, if any. Stats then cover only
+  /// that workout, and new logs are tagged with it.
+  final Workout? workout;
+
   const ExerciseDetailScreen({
     super.key,
     required this.exercise,
     required this.exerciseRepo,
+    this.workout,
   });
 
   @override
@@ -31,6 +41,9 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   final _uuid = const Uuid();
   late Exercise _exercise;
   List<Exercise> _alternatives = [];
+  List<ExerciseLog> _logs = [];
+  Map<String, Workout> _workoutsById = {};
+  bool _statsRequested = false;
   // Set while this screen's "Removed … Undo" snackbar may be showing.
   ScaffoldMessengerState? _undoMessenger;
 
@@ -46,6 +59,46 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
     // Snackbars are app-wide; don't let Undo outlive the screen it belongs to.
     _undoMessenger?.hideCurrentSnackBar();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_statsRequested) {
+      _statsRequested = true;
+      _loadStats();
+    }
+  }
+
+  /// Loads this exercise's logs and all workouts, for the stats card and the
+  /// log sheet.
+  Future<void> _loadStats() async {
+    final repos = AppRepositories.of(context);
+    final logs = await repos.exerciseLogRepo.getByExerciseId(_exercise.id);
+    final workouts = await repos.workoutRepo.getAll();
+    if (!mounted) return;
+    setState(() {
+      _logs = logs;
+      _workoutsById = {for (final w in workouts) w.id: w};
+    });
+  }
+
+  Future<void> _openProgress() async {
+    final repos = AppRepositories.of(context);
+    final w = widget.workout;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExerciseProgressScreen(
+          exercise: _exercise,
+          logRepo: repos.exerciseLogRepo,
+          initialWorkoutFilter:
+              w == null ? WorkoutFilter.all : WorkoutFilter.workout(w.id),
+        ),
+      ),
+    );
+    // Logs may have been edited or deleted there.
+    await _loadStats();
   }
 
   Future<void> _loadAlternatives() async {
@@ -94,6 +147,8 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
         builder: (_) => ExerciseDetailScreen(
           exercise: alt,
           exerciseRepo: widget.exerciseRepo,
+          // Swapping in an alternative still counts toward this workout.
+          workout: widget.workout,
         ),
       ),
     );
@@ -119,15 +174,22 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
       setState(() => _exercise = updated);
     }
     await _loadAlternatives();
+    await _loadStats();
   }
 
   void _showLogDialog(BuildContext context, ExerciseLogRepository logRepo) {
-    List<SetChild> sets = _exercise.setTemplate.sets
-        .map((s) => s.copyWith())
-        .map((s) => SetChild(id: _uuid.v4(), reps: s.reps, weight: s.weight, unit: s.unit))
-        .toList();
+    // Workout to tag the log with (null = no workout). Defaults to the
+    // workout this screen was opened from.
+    String? workoutId = widget.workout?.id;
+    List<SetChild> sets = startingSets(_exercise, _logs, workoutId);
+    // Once the user touches the sets, picking another workout won't refill them.
+    var setsEdited = false;
     DateTime date = DateTime.now();
     final notesCtrl = TextEditingController();
+    final workouts = _workoutsById.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final hintStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant);
 
     showModalBottomSheet(
       context: context,
@@ -135,6 +197,11 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            final id = workoutId;
+            final workoutName = _workoutsById[id]?.name;
+            final lastInWorkout = id == null
+                ? null
+                : computeExerciseStats(_logs, WorkoutFilter.workout(id)).last;
             return Padding(
               padding: EdgeInsets.only(
                 left: 16,
@@ -149,8 +216,32 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Log: ${_exercise.name}',
+                    Text(
+                        workoutName == null
+                            ? 'Log: ${_exercise.name}'
+                            : 'Log: ${_exercise.name} · $workoutName',
                         style: Theme.of(ctx).textTheme.titleLarge),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String?>(
+                      initialValue: workoutId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Workout'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('No workout')),
+                        for (final w in workouts)
+                          DropdownMenuItem<String?>(
+                              value: w.id,
+                              child: Text(w.name,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (v) => setModalState(() {
+                        workoutId = v;
+                        if (!setsEdited) {
+                          sets = startingSets(_exercise, _logs, v);
+                        }
+                      }),
+                    ),
                     const SizedBox(height: 12),
                     DatePickerField(
                       date: date,
@@ -174,6 +265,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                           label: const Text('Add'),
                           onPressed: () {
                             setModalState(() {
+                              setsEdited = true;
                               sets.add(SetChild(
                                 id: _uuid.v4(),
                                 reps: sets.isNotEmpty ? sets.last.reps : 10,
@@ -186,16 +278,33 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                         ),
                       ],
                     ),
+                    if (!setsEdited)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          lastInWorkout != null
+                              ? 'Starting from your last $workoutName log '
+                                  '(${DateFormat('dd/MM/yy').format(lastInWorkout.date)})'
+                              : 'Starting from the set template',
+                          style: hintStyle,
+                        ),
+                      ),
                     ...sets.asMap().entries.map((e) {
                       final idx = e.key;
                       return SetRowWidget(
                         key: ValueKey(e.value.id),
                         set: e.value,
                         onChanged: (updated) {
-                          setModalState(() => sets[idx] = updated);
+                          setModalState(() {
+                            setsEdited = true;
+                            sets[idx] = updated;
+                          });
                         },
                         onDelete: () {
-                          setModalState(() => sets.removeAt(idx));
+                          setModalState(() {
+                            setsEdited = true;
+                            sets.removeAt(idx);
+                          });
                         },
                       );
                     }),
@@ -212,9 +321,12 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                                 ? null
                                 : notesCtrl.text.trim(),
                             sets: sets,
+                            workoutId: workoutId,
+                            workoutName: workoutName,
                           );
                           try {
                             await logRepo.insert(entry);
+                            _loadStats();
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
                               showDialog(
@@ -284,6 +396,13 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
         padding: EdgeInsets.fromLTRB(
             16, 16, 16, 88 + MediaQuery.paddingOf(context).bottom),
         children: [
+          ExerciseStatsCard(
+            logs: _logs,
+            workout: widget.workout,
+            workoutsById: _workoutsById,
+            onSeeProgress: _openProgress,
+          ),
+          const SizedBox(height: 16),
           if (_exercise.aliases.isNotEmpty) ...[
             Text('Aliases',
                 style: Theme.of(context).textTheme.labelLarge),

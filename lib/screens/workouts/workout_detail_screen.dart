@@ -190,6 +190,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                       builder: (_) => ExerciseDetailScreen(
                         exercise: ex,
                         exerciseRepo: repos.exerciseRepo,
+                        // Stats and new logs follow this workout.
+                        workout: _workout,
                       ),
                     ),
                   );
